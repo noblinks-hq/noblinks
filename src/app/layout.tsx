@@ -18,36 +18,36 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Agentic Coding Boilerplate",
-    template: "%s | Agentic Coding Boilerplate",
+    default: "Noblinks",
+    template: "%s | Noblinks",
   },
   description:
-    "Complete agentic coding boilerplate with authentication, database, AI integration, and modern tooling - perfect for building AI-powered applications and autonomous agents by Leon van Zyl",
+    "Noblinks is an AI on-call engineer that helps you monitor, debug, and fix infrastructure in one place.",
   keywords: [
-    "Next.js",
-    "React",
-    "TypeScript",
+    "Noblinks",
+    "monitoring",
+    "on-call",
     "AI",
-    "OpenRouter",
-    "Boilerplate",
-    "Authentication",
-    "PostgreSQL",
+    "infrastructure",
+    "alerts",
+    "incident response",
+    "DevOps",
   ],
   authors: [{ name: "Leon van Zyl" }],
   creator: "Leon van Zyl",
   openGraph: {
     type: "website",
     locale: "en_US",
-    siteName: "Agentic Coding Boilerplate",
-    title: "Agentic Coding Boilerplate",
+    siteName: "Noblinks",
+    title: "Noblinks",
     description:
-      "Complete agentic coding boilerplate with authentication, database, AI integration, and modern tooling",
+      "Noblinks is an AI on-call engineer that helps you monitor, debug, and fix infrastructure in one place.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Agentic Coding Boilerplate",
+    title: "Noblinks",
     description:
-      "Complete agentic coding boilerplate with authentication, database, AI integration, and modern tooling",
+      "Noblinks is an AI on-call engineer that helps you monitor, debug, and fix infrastructure in one place.",
   },
   robots: {
     index: true,
@@ -59,10 +59,10 @@ export const metadata: Metadata = {
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "WebApplication",
-  name: "Agentic Coding Boilerplate",
+  name: "Noblinks",
   description:
-    "Complete agentic coding boilerplate with authentication, database, AI integration, and modern tooling",
-  applicationCategory: "DeveloperApplication",
+    "Noblinks is an AI on-call engineer that helps you monitor, debug, and fix infrastructure in one place.",
+  applicationCategory: "Monitoring",
   operatingSystem: "Any",
   offers: {
     "@type": "Offer",

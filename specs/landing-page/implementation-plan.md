@@ -62,60 +62,60 @@ This is the primary file and largest change. The entire page body is rewritten.
 ## Phase 2: Metadata and SEO (`src/app/layout.tsx`)
 
 ### 2.1 — Update Metadata Object
-- [ ] Change `title.default` from "Agentic Coding Boilerplate" to "Noblinks"
-- [ ] Change `title.template` from "%s | Agentic Coding Boilerplate" to "%s | Noblinks"
-- [ ] Update `description` to: "Noblinks is an AI on-call engineer that helps you monitor, debug, and fix infrastructure in one place."
-- [ ] Update `keywords` array to: `["Noblinks", "monitoring", "on-call", "AI", "infrastructure", "alerts", "incident response", "DevOps"]`
-- [ ] Update `openGraph.siteName` to "Noblinks"
-- [ ] Update `openGraph.title` to "Noblinks"
-- [ ] Update `openGraph.description` to match the new description
-- [ ] Update `twitter.title` to "Noblinks"
-- [ ] Update `twitter.description` to match the new description
+- [x] Change `title.default` from "Agentic Coding Boilerplate" to "Noblinks"
+- [x] Change `title.template` from "%s | Agentic Coding Boilerplate" to "%s | Noblinks"
+- [x] Update `description` to: "Noblinks is an AI on-call engineer that helps you monitor, debug, and fix infrastructure in one place."
+- [x] Update `keywords` array to: `["Noblinks", "monitoring", "on-call", "AI", "infrastructure", "alerts", "incident response", "DevOps"]`
+- [x] Update `openGraph.siteName` to "Noblinks"
+- [x] Update `openGraph.title` to "Noblinks"
+- [x] Update `openGraph.description` to match the new description
+- [x] Update `twitter.title` to "Noblinks"
+- [x] Update `twitter.description` to match the new description
 
 ### 2.2 — Update JSON-LD Structured Data
-- [ ] Change `name` from "Agentic Coding Boilerplate" to "Noblinks"
-- [ ] Update `description` to match the new description
-- [ ] Change `applicationCategory` from "DeveloperApplication" to "Monitoring"
+- [x] Change `name` from "Agentic Coding Boilerplate" to "Noblinks"
+- [x] Update `description` to match the new description
+- [x] Change `applicationCategory` from "DeveloperApplication" to "Monitoring"
 
 ---
 
 ## Phase 3: Site Header (`src/components/site-header.tsx`)
 
 ### 3.1 — Update Branding Text
-- [ ] Replace the text "Starter Kit" with "Noblinks" in the `<span>` element
-- [ ] Update `aria-label` from "Starter Kit - Go to homepage" to "Noblinks - Go to homepage"
+- [x] Replace the text "Starter Kit" with "Noblinks" in the `<span>` element
+- [x] Update `aria-label` from "Starter Kit - Go to homepage" to "Noblinks - Go to homepage"
 
 ### 3.2 — Preserve Existing Structure
-- [ ] Keep the `Bot` icon and its wrapper div unchanged
-- [ ] Keep the `UserProfile` and `ModeToggle` components unchanged
-- [ ] Keep the skip-to-content accessibility link unchanged
+- [x] Keep the `Bot` icon and its wrapper div unchanged
+- [x] Keep the `UserProfile` and `ModeToggle` components unchanged
+- [x] Keep the skip-to-content accessibility link unchanged
 
 ---
 
 ## Phase 4: Site Footer (`src/components/site-footer.tsx`)
 
 ### 4.1 — Update Footer Content
-- [ ] Remove the `GitHubStars` import and component usage
-- [ ] Replace the attribution paragraph with "Built by Noblinks"
-- [ ] Keep the existing footer layout and styling (`border-t py-6 text-center text-sm text-muted-foreground`)
+- [x] Remove the `GitHubStars` import and component usage
+- [x] Replace the attribution paragraph with "Built by Noblinks"
+- [x] Keep the existing footer layout and styling (`border-t py-6 text-center text-sm text-muted-foreground`)
 
 ---
 
 ## Phase 5: Verification
 
 ### 5.1 — Build Checks
-- [ ] Run `pnpm run lint` — confirm zero errors
-- [ ] Run `pnpm run typecheck` — confirm zero errors
+- [x] Run `pnpm run lint` — confirm zero errors
+- [x] Run `pnpm run typecheck` — confirm zero errors
 
 ### 5.2 — Visual Review
-- [ ] Landing page displays new Noblinks hero, features, steps, and CTA
-- [ ] No references to "Starter Kit", "Boilerplate", or "AI Applications" visible anywhere
-- [ ] Header shows "Noblinks"
-- [ ] Footer shows "Built by Noblinks"
-- [ ] Dark mode toggle works and page renders correctly in both themes
-- [ ] Page is responsive at mobile, tablet, and desktop widths
+- [x] Landing page displays new Noblinks hero, features, steps, and CTA
+- [x] No references to "Starter Kit", "Boilerplate", or "AI Applications" visible anywhere
+- [x] Header shows "Noblinks"
+- [x] Footer shows "Built by Noblinks"
+- [ ] Dark mode toggle works and page renders correctly in both themes *(manual)*
+- [ ] Page is responsive at mobile, tablet, and desktop widths *(manual)*
 
 ### 5.3 — Navigation
-- [ ] "View Dashboard" CTA links to `/dashboard`
-- [ ] Header logo links to `/`
-- [ ] Auth-gated routes (`/dashboard`, `/chat`) remain accessible
+- [x] "View Dashboard" CTA links to `/dashboard`
+- [x] Header logo links to `/`
+- [ ] Auth-gated routes (`/dashboard`, `/chat`) remain accessible *(manual)*

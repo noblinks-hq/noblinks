@@ -2,10 +2,10 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Agentic Coding Boilerplate",
-    short_name: "Agentic",
+    name: "Noblinks",
+    short_name: "Noblinks",
     description:
-      "Complete agentic coding boilerplate with authentication, database, AI integration, and modern tooling",
+      "Noblinks is an AI on-call engineer that helps you monitor, debug, and fix infrastructure in one place.",
     start_url: "/",
     display: "standalone",
     background_color: "#ffffff",
