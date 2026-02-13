@@ -1,11 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { organization, useSession } from "@/lib/auth-client";
 
 export default function AcceptInvitationPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      }
+    >
+      <AcceptInvitationContent />
+    </Suspense>
+  );
+}
+
+function AcceptInvitationContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { data: session, isPending: sessionPending } = useSession();
@@ -83,11 +97,9 @@ export default function AcceptInvitationPage() {
         )}
 
         {status === "success" && (
-          <>
-            <p className="text-sm text-green-600">
-              Invitation accepted! Redirecting to dashboard...
-            </p>
-          </>
+          <p className="text-sm text-green-600">
+            Invitation accepted! Redirecting to dashboard...
+          </p>
         )}
 
         {status === "error" && (
