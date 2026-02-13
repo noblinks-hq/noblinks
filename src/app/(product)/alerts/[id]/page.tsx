@@ -1,26 +1,20 @@
 "use client";
 
-import { use, useRef } from "react";
+import { use } from "react";
 import Link from "next/link";
 import {
   ChevronRight,
-  Terminal,
   CheckCircle,
   Clock,
   Sparkles,
   Bot,
 } from "lucide-react";
 import { SeverityBadge } from "@/components/product/severity-badge";
-import { TerminalBlock } from "@/components/product/terminal-block";
 import { TimeSeriesWidget } from "@/components/product/time-series-widget";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useNoblinks } from "@/context/noblinks-context";
-import {
-  generateTimeSeriesData,
-  terminalCommandsByMetric,
-  aiGuidanceByMetric,
-} from "@/lib/mock-data";
+import { generateTimeSeriesData } from "@/lib/mock-data";
 
 export default function AlertDetailPage({
   params,
@@ -29,7 +23,6 @@ export default function AlertDetailPage({
 }) {
   const { id } = use(params);
   const { alerts, machines, widgets, updateAlertStatus } = useNoblinks();
-  const terminalRef = useRef<HTMLDivElement>(null);
 
   const alert = alerts.find((a) => a.id === id);
 
@@ -107,14 +100,11 @@ export default function AlertDetailPage({
 
       {/* Action buttons */}
       <div className="flex gap-3">
-        <Button
-          variant="outline"
-          onClick={() =>
-            terminalRef.current?.scrollIntoView({ behavior: "smooth" })
-          }
-        >
-          <Terminal className="mr-2 h-4 w-4" />
-          Open Terminal
+        <Button variant="outline" asChild>
+          <Link href="/chat">
+            <Bot className="mr-2 h-4 w-4" />
+            Open Noblinks AI
+          </Link>
         </Button>
         {alert.status === "triggered" ? (
           <Button
@@ -171,49 +161,13 @@ export default function AlertDetailPage({
             <div className="absolute -left-[1.3rem] top-0.5 h-3 w-3 rounded-full border-2 border-green-500 bg-background" />
             <p className="text-sm font-medium">Suggested fix available</p>
             <p className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Terminal className="h-3 w-3" />
-              Open the terminal below to investigate
+              <Bot className="h-3 w-3" />
+              Open Noblinks AI to investigate
             </p>
           </div>
         </div>
       </div>
 
-      {/* Terminal + AI Guidance */}
-      <div ref={terminalRef} className="space-y-4">
-        <h3 className="font-semibold">Terminal</h3>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <TerminalBlock
-              entries={
-                terminalCommandsByMetric[chartWidget.metric] ??
-                terminalCommandsByMetric["cpu_usage_percent"] ??
-                []
-              }
-            />
-          </div>
-          <div className="space-y-3">
-            <h4 className="text-sm font-semibold text-muted-foreground">
-              AI Guidance
-            </h4>
-            {(
-              aiGuidanceByMetric[chartWidget.metric] ??
-              aiGuidanceByMetric["cpu_usage_percent"] ??
-              []
-            ).map((suggestion, i) => (
-              <div
-                key={i}
-                className="rounded-lg border p-3 text-sm"
-              >
-                <div className="mb-1 flex items-center gap-2 font-medium">
-                  <Sparkles className="h-3.5 w-3.5 text-primary" />
-                  Suggestion {i + 1}
-                </div>
-                <p className="text-muted-foreground">{suggestion.text}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
