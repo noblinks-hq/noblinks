@@ -1,3 +1,17 @@
+export type DashboardCategory = "infrastructure" | "docker" | "kubernetes" | "custom";
+
+export interface Dashboard {
+  id: string;
+  name: string;
+  environment: string;
+  category: DashboardCategory;
+  organizationId: string;
+  createdBy: string;
+  visualizationCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type MachineType = "linux" | "windows" | "kubernetes";
 export type MachineStatus = "online" | "offline";
 export type AlertSeverity = "critical" | "warning" | "info";

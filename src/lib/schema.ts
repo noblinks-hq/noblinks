@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, integer, uuid, index } from "drizzle-orm/pg-core";
 
 // IMPORTANT! ID fields should ALWAYS use UUID types, EXCEPT the BetterAuth tables.
 
@@ -130,5 +130,31 @@ export const invitation = pgTable(
   (table) => [
     index("invitation_org_id_idx").on(table.organizationId),
     index("invitation_email_idx").on(table.email),
+  ]
+);
+
+export const dashboard = pgTable(
+  "dashboard",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    environment: text("environment").notNull(),
+    category: text("category").notNull(), // infrastructure | docker | kubernetes | custom
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    visualizationCount: integer("visualization_count").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("dashboard_org_id_idx").on(table.organizationId),
+    index("dashboard_created_by_idx").on(table.createdBy),
   ]
 );

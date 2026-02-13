@@ -24,7 +24,10 @@
       "Bash(pnpm run db:generate:*)",
       "Bash(pnpm run db:migrate:*)",
       "Bash(xargs:*)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "Bash(ls:*)",
+      "Bash(pnpm dlx:*)",
+      "Bash(git -C /home/rashid/noblinks log:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

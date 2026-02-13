@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
+  LayoutGrid,
   Server,
   AlertTriangle,
   Bot,
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/overview", label: "Overview", icon: LayoutDashboard },
+  { href: "/dashboards", label: "Dashboards", icon: LayoutGrid },
   { href: "/machines", label: "Machines", icon: Server },
   { href: "/alerts", label: "Alerts", icon: AlertTriangle },
   { href: "/machines", label: "AI Assistant", icon: Bot },
