@@ -312,6 +312,13 @@ export const seedMachines: Machine[] = [
     status: "online",
     lastSeen: "30 seconds ago",
   },
+  {
+    id: "machine-staging-db-1",
+    name: "staging-db-1",
+    type: "linux",
+    status: "offline",
+    lastSeen: "4 minutes ago",
+  },
 ];
 
 export const seedAlerts: Alert[] = [

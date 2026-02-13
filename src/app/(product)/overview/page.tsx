@@ -1,193 +1,168 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  Server,
-  AlertTriangle,
-  Activity,
-  Sparkles,
-  ChevronRight,
-} from "lucide-react";
-import { AlertRow } from "@/components/product/alert-row";
-import { TimeSeriesWidget } from "@/components/product/time-series-widget";
-import { Skeleton } from "@/components/ui/skeleton";
+import { CheckCircle2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useNoblinks } from "@/context/noblinks-context";
-import { generateTimeSeriesData } from "@/lib/mock-data";
-import type { Widget } from "@/lib/types";
+import type { AiInsight } from "@/lib/types";
 
-const aiSuggestions = [
+const severityDotColor: Record<string, string> = {
+  critical: "bg-red-500",
+  warning: "bg-amber-500",
+};
+
+const aiInsights: AiInsight[] = [
   {
-    text: "Docker storage trending upward on prod-api-1",
-    href: "/machines/machine-prod-api-1",
+    id: "insight-1",
+    message: "Disk usage trending toward 90% within 2 days",
+    machineId: "machine-prod-api-1",
+    machineName: "prod-api-1",
+    confidence: "High confidence",
   },
   {
-    text: "Pod restarts detected on k8s-cluster-1",
-    href: "/machines/machine-k8s-cluster-1",
+    id: "insight-2",
+    message: "Memory growth anomaly detected",
+    machineId: "machine-k8s-cluster-1",
+    machineName: "k8s-cluster-1",
+    confidence: "Medium confidence",
   },
   {
-    text: "CPU usage on prod-api-1 exceeded 85% twice this week",
-    href: "/machines/machine-prod-api-1",
+    id: "insight-3",
+    message: "CPU saturation spikes increasing",
+    machineId: "machine-prod-api-1",
+    machineName: "prod-api-1",
   },
 ];
 
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
 export default function OverviewPage() {
-  const { machines, alerts, widgets } = useNoblinks();
-  const [mounted, setMounted] = useState(false);
-  const [charts, setCharts] = useState<{ cpu: Widget; memory: Widget } | null>(null);
+  const { machines, alerts } = useNoblinks();
 
-  useEffect(() => {
-    // Delay to show skeleton loading state, then generate chart data.
-    // Chart data uses Math.random / Date.now / toLocaleTimeString which
-    // differ between server & client, so it must be client-only.
-    const timer = setTimeout(() => {
-      setCharts({
-        cpu: {
-          id: "overview-cpu",
-          machineId: "",
-          type: "timeseries",
-          title: "CPU Usage (24h)",
-          metric: "cpu_usage_percent",
-          data: generateTimeSeriesData(24, 15, 65),
-        },
-        memory: {
-          id: "overview-memory",
-          machineId: "",
-          type: "timeseries",
-          title: "Memory Usage (24h)",
-          metric: "memory_usage_percent",
-          data: generateTimeSeriesData(24, 40, 75),
-        },
-      });
-      setMounted(true);
-    }, 400);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const onlineMachines = machines.filter((m) => m.status === "online").length;
-  const activeAlerts = alerts.filter((a) => a.status === "triggered").length;
-  const recentAlerts = alerts.slice(0, 5);
-
-  const stats = [
-    {
-      label: "Machines Online",
-      value: onlineMachines,
-      icon: Server,
-      color: "text-green-500",
-    },
-    {
-      label: "Active Alerts",
-      value: activeAlerts,
-      icon: AlertTriangle,
-      color: "text-red-500",
-    },
-    {
-      label: "Total Monitors",
-      value: widgets.length,
-      icon: Activity,
-      color: "text-blue-500",
-    },
-    {
-      label: "AI Suggestions",
-      value: 3,
-      icon: Sparkles,
-      color: "text-amber-500",
-    },
-  ];
+  const firingAlerts = alerts.filter((a) => a.status === "triggered");
+  const offlineMachines = machines.filter((m) => m.status === "offline");
 
   function getMachineName(machineId: string): string {
     return machines.find((m) => m.id === machineId)?.name ?? "Unknown";
   }
 
+  const allClear =
+    firingAlerts.length === 0 &&
+    offlineMachines.length === 0 &&
+    aiInsights.length === 0;
+
   return (
-    <div className="space-y-8">
-      <h1 className="text-2xl font-bold">Overview</h1>
-
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <div key={stat.label} className="rounded-lg border p-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">{stat.label}</p>
-              <stat.icon className={`h-4 w-4 ${stat.color}`} />
-            </div>
-            {mounted ? (
-              <p className="mt-2 text-3xl font-bold">{stat.value}</p>
-            ) : (
-              <Skeleton className="mt-2 h-9 w-16" />
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Charts */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {charts ? <TimeSeriesWidget widget={charts.cpu} /> : <Skeleton className="h-64 rounded-lg" />}
-        {charts ? <TimeSeriesWidget widget={charts.memory} /> : <Skeleton className="h-64 rounded-lg" />}
-      </div>
-
-      {/* Recent Alerts + AI Suggestions */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Recent Alerts */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Recent Alerts</h2>
-            <Link
-              href="/alerts"
-              className="flex items-center gap-1 text-sm text-primary hover:underline"
-            >
-              View all
-              <ChevronRight className="h-4 w-4" />
-            </Link>
-          </div>
-          {recentAlerts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No alerts yet.</p>
-          ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="px-4 py-3 text-left font-medium">Alert</th>
-                    <th className="px-4 py-3 text-left font-medium">Severity</th>
-                    <th className="px-4 py-3 text-left font-medium">Machine</th>
-                    <th className="px-4 py-3 text-left font-medium">Status</th>
-                    <th className="px-4 py-3 text-left font-medium">Triggered</th>
-                    <th className="px-4 py-3 text-left font-medium">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentAlerts.map((alert) => (
-                    <AlertRow
-                      key={alert.id}
-                      alert={alert}
-                      machineName={getMachineName(alert.machineId)}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* AI Suggestions */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-amber-500" />
-            AI Suggestions
-          </h2>
-          <div className="space-y-3">
-            {aiSuggestions.map((suggestion, i) => (
-              <Link
-                key={i}
-                href={suggestion.href}
-                className="block rounded-lg border p-3 text-sm transition-colors hover:bg-muted/50"
+    <div className="mx-auto max-w-4xl space-y-10 py-4">
+      {/* Active Alerts */}
+      {firingAlerts.length > 0 && (
+        <section>
+          <h2 className="text-lg font-semibold">Active Alerts</h2>
+          <div className="mt-1 border-b" />
+          <div className="mt-4 space-y-3">
+            {firingAlerts.map((alert) => (
+              <div
+                key={alert.id}
+                className="flex items-center gap-4 rounded-lg border px-5 py-4 transition-colors hover:bg-muted/50"
               >
-                {suggestion.text}
-              </Link>
+                <span
+                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${severityDotColor[alert.severity] ?? "bg-gray-400"}`}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{alert.title}</p>
+                  <p
+                    className="mt-0.5 text-sm text-muted-foreground"
+                    suppressHydrationWarning
+                  >
+                    {getMachineName(alert.machineId)} &middot; Triggered{" "}
+                    {timeAgo(alert.triggeredAt)}
+                  </p>
+                </div>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href={`/alerts/${alert.id}`}>View</Link>
+                </Button>
+              </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* Offline Machines */}
+      {offlineMachines.length > 0 && (
+        <section>
+          <h2 className="text-lg font-semibold">Offline Machines</h2>
+          <div className="mt-1 border-b" />
+          <div className="mt-4 space-y-3">
+            {offlineMachines.map((machine) => (
+              <div
+                key={machine.id}
+                className="flex items-center gap-4 rounded-lg border px-5 py-4 transition-colors hover:bg-muted/50"
+              >
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-yellow-500" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{machine.name}</p>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    Last seen {machine.lastSeen}
+                  </p>
+                </div>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href={`/machines/${machine.id}`}>View Machine</Link>
+                </Button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* AI Insights */}
+      {aiInsights.length > 0 && (
+        <section>
+          <h2 className="text-lg font-semibold">AI Insights</h2>
+          <div className="mt-1 border-b" />
+          <div className="mt-4 space-y-3">
+            {aiInsights.map((insight) => (
+              <div
+                key={insight.id}
+                className="flex items-center gap-4 rounded-lg border px-5 py-4 transition-colors hover:bg-muted/50"
+              >
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{insight.message}</p>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    {insight.machineName}
+                    {insight.confidence && (
+                      <> &middot; {insight.confidence}</>
+                    )}
+                  </p>
+                </div>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href={`/machines/${insight.machineId}`}>Review</Link>
+                </Button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Empty State */}
+      {allClear && (
+        <div className="flex flex-col items-center justify-center py-32 text-center">
+          <CheckCircle2 className="h-12 w-12 text-green-500" />
+          <h2 className="mt-6 text-2xl font-semibold">
+            All systems operational
+          </h2>
+          <p className="mt-2 text-muted-foreground">
+            No active alerts or risks detected.
+          </p>
         </div>
-      </div>
+      )}
     </div>
   );
 }

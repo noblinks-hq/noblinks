@@ -12,6 +12,14 @@ export interface Dashboard {
   updatedAt: string;
 }
 
+export interface AiInsight {
+  id: string;
+  message: string;
+  machineId: string;
+  machineName: string;
+  confidence?: string;
+}
+
 export type MachineType = "linux" | "windows" | "kubernetes";
 export type MachineStatus = "online" | "offline";
 export type AlertSeverity = "critical" | "warning" | "info";

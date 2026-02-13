@@ -27,7 +27,11 @@
       "Bash(node -e:*)",
       "Bash(ls:*)",
       "Bash(pnpm dlx:*)",
-      "Bash(git -C /home/rashid/noblinks log:*)"
+      "Bash(git -C /home/rashid/noblinks log:*)",
+      "Bash(git -C /home/rashid/noblinks status)",
+      "Bash(git -C /home/rashid/noblinks diff)",
+      "Bash(git -C /home/rashid/noblinks add -A)",
+      "Bash(git -C:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
