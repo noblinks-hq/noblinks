@@ -18,7 +18,7 @@ export function orgScope(session: Session): string {
 /**
  * Generates a URL-safe slug from a string.
  */
-function toSlug(name: string): string {
+export function toSlug(name: string): string {
   return name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -26,41 +26,24 @@ function toSlug(name: string): string {
 }
 
 /**
- * Ensures the current user has an organization.
- * If none exists, creates one using their name or email prefix,
- * then sets it as the active organization.
- *
- * Call this client-side after login/signup.
+ * Creates an organization and sets it as active.
+ * Call this from /setup-organization after user provides a name.
  */
-export async function ensureOrganization(user: {
-  name: string
-  email: string
-}) {
-  const { data: orgs } = await authClient.organization.list()
+export async function createOrganization(name: string) {
+  const slug = toSlug(name) + "-" + Date.now().toString(36)
 
-  const firstOrg = orgs?.[0]
-  if (firstOrg) {
-    // User already has an org — set it as active if not already
-    await authClient.organization.setActive({
-      organizationId: firstOrg.id,
-    })
-    return firstOrg
-  }
-
-  // No org yet — create one
-  const orgName = user.name || user.email.split("@")[0] || "My Organization"
-  const slug = toSlug(orgName) + "-" + Date.now().toString(36)
-
-  const { data: newOrg } = await authClient.organization.create({
-    name: orgName,
+  const { data: newOrg, error } = await authClient.organization.create({
+    name,
     slug,
   })
 
-  if (newOrg) {
-    await authClient.organization.setActive({
-      organizationId: newOrg.id,
-    })
+  if (error || !newOrg) {
+    throw new Error(error?.message || "Failed to create organization")
   }
+
+  await authClient.organization.setActive({
+    organizationId: newOrg.id,
+  })
 
   return newOrg
 }

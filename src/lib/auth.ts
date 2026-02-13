@@ -2,9 +2,7 @@ import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { organization } from "better-auth/plugins"
 import { createAccessControl } from "better-auth/plugins/access"
-import { eq } from "drizzle-orm"
 import { db } from "./db"
-import { member } from "./schema"
 
 const statement = {
   organization: ["update", "delete"],
@@ -80,29 +78,4 @@ export const auth = betterAuth({
       },
     }),
   ],
-  databaseHooks: {
-    session: {
-      create: {
-        before: async (session) => {
-          const memberships = await db
-            .select()
-            .from(member)
-            .where(eq(member.userId, session.userId))
-            .limit(1)
-
-          const firstMembership = memberships[0]
-          if (firstMembership) {
-            return {
-              data: {
-                ...session,
-                activeOrganizationId: firstMembership.organizationId,
-              },
-            }
-          }
-
-          return { data: session }
-        },
-      },
-    },
-  },
 })
