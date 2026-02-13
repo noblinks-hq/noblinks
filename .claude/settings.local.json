@@ -13,13 +13,20 @@
       "Bash(git log:*)",
       "Bash(find:*)",
       "Bash(git checkout:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "WebFetch(domain:www.better-auth.com)",
+      "WebSearch",
+      "WebFetch(domain:www.premieroctet.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(pnpm run typecheck:*)",
+      "Bash(pnpm run lint:*)",
+      "Bash(npx @better-auth/cli generate:*)",
+      "Bash(pnpm run db:generate:*)",
+      "Bash(pnpm run db:migrate:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
-    "shadcn",
-    "playwright",
-    "next-devtools"
+    "shadcn"
   ]
 }

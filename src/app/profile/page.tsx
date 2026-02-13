@@ -24,7 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { useSession } from "@/lib/auth-client";
+import { useSession, updateUser, listSessions, changePassword } from "@/lib/auth-client";
 
 export default function ProfilePage() {
   const { data: session, isPending } = useSession();
@@ -32,12 +32,26 @@ export default function ProfilePage() {
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [securityOpen, setSecurityOpen] = useState(false);
   const [emailPrefsOpen, setEmailPrefsOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [sessionCount, setSessionCount] = useState<number | null>(null);
+  const [profileUpdating, setProfileUpdating] = useState(false);
+  const [passwordUpdating, setPasswordUpdating] = useState(false);
 
   useEffect(() => {
     if (!isPending && !session) {
-      router.push("/");
+      router.push("/login");
     }
   }, [isPending, session, router]);
+
+  useEffect(() => {
+    if (session) {
+      listSessions().then((res) => {
+        if (res.data) {
+          setSessionCount(res.data.length);
+        }
+      });
+    }
+  }, [session]);
 
   if (isPending || !session) {
     return (
@@ -56,11 +70,46 @@ export default function ProfilePage() {
       })
     : null;
 
-  const handleEditProfileSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleEditProfileSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // In a real app, this would call an API to update the user profile
-    toast.info("Profile updates require backend implementation");
-    setEditProfileOpen(false);
+    const formData = new FormData(e.currentTarget);
+    const name = formData.get("name") as string;
+    setProfileUpdating(true);
+    const { error } = await updateUser({ name });
+    setProfileUpdating(false);
+    if (error) {
+      toast.error(error.message || "Failed to update profile");
+    } else {
+      toast.success("Profile updated successfully");
+      setEditProfileOpen(false);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const currentPassword = formData.get("currentPassword") as string;
+    const newPassword = formData.get("newPassword") as string;
+    const confirmPassword = formData.get("confirmPassword") as string;
+
+    if (newPassword !== confirmPassword) {
+      toast.error("New passwords do not match");
+      return;
+    }
+
+    setPasswordUpdating(true);
+    const { error } = await changePassword({
+      currentPassword,
+      newPassword,
+      revokeOtherSessions: false,
+    });
+    setPasswordUpdating(false);
+    if (error) {
+      toast.error(error.message || "Failed to change password");
+    } else {
+      toast.success("Password changed successfully");
+      setChangePasswordOpen(false);
+    }
   };
 
   return (
@@ -198,7 +247,11 @@ export default function ProfilePage() {
                   <div className="h-2 w-2 bg-green-500 rounded-full"></div>
                   <div>
                     <p className="font-medium">Current Session</p>
-                    <p className="text-sm text-muted-foreground">Active now</p>
+                    <p className="text-sm text-muted-foreground">
+                      {sessionCount !== null
+                        ? `${sessionCount} active ${sessionCount === 1 ? "session" : "sessions"}`
+                        : "Loading sessions..."}
+                    </p>
                   </div>
                 </div>
                 <Badge
@@ -281,6 +334,7 @@ export default function ProfilePage() {
               <Label htmlFor="name">Full Name</Label>
               <Input
                 id="name"
+                name="name"
                 defaultValue={user.name || ""}
                 placeholder="Enter your name"
               />
@@ -295,7 +349,7 @@ export default function ProfilePage() {
                 className="bg-muted"
               />
               <p className="text-xs text-muted-foreground">
-                Email cannot be changed for OAuth accounts
+                Email cannot be changed
               </p>
             </div>
             <div className="flex justify-end gap-2 pt-4">
@@ -306,7 +360,9 @@ export default function ProfilePage() {
               >
                 Cancel
               </Button>
-              <Button type="submit">Save Changes</Button>
+              <Button type="submit" disabled={profileUpdating}>
+                {profileUpdating ? "Saving..." : "Save Changes"}
+              </Button>
             </div>
           </form>
         </DialogContent>
@@ -328,15 +384,20 @@ export default function ProfilePage() {
                 <div>
                   <p className="font-medium">Password</p>
                   <p className="text-sm text-muted-foreground">
-                    {user.email?.includes("@gmail")
-                      ? "Managed by Google"
-                      : "Set a password for your account"}
+                    Change your account password
                   </p>
                 </div>
               </div>
-              <Badge variant="outline">
-                {user.email?.includes("@gmail") ? "OAuth" : "Not Set"}
-              </Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSecurityOpen(false);
+                  setChangePasswordOpen(true);
+                }}
+              >
+                Change Password
+              </Button>
             </div>
 
             <div className="flex items-center justify-between p-4 border rounded-lg">
@@ -364,7 +425,9 @@ export default function ProfilePage() {
                   </p>
                 </div>
               </div>
-              <Badge variant="default">1 Active</Badge>
+              <Badge variant="default">
+                {sessionCount !== null ? `${sessionCount} Active` : "..."}
+              </Badge>
             </div>
           </div>
           <div className="flex justify-end pt-4">
@@ -409,6 +472,61 @@ export default function ProfilePage() {
               Close
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Password Dialog */}
+      <Dialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Change Password</DialogTitle>
+            <DialogDescription>
+              Enter your current password and choose a new one.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleChangePassword} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="currentPassword">Current Password</Label>
+              <Input
+                id="currentPassword"
+                name="currentPassword"
+                type="password"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New Password</Label>
+              <Input
+                id="newPassword"
+                name="newPassword"
+                type="password"
+                required
+                minLength={8}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm New Password</Label>
+              <Input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                required
+                minLength={8}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setChangePasswordOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={passwordUpdating}>
+                {passwordUpdating ? "Changing..." : "Change Password"}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

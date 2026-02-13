@@ -1,6 +1,44 @@
 import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
+import { organization } from "better-auth/plugins"
+import { createAccessControl } from "better-auth/plugins/access"
+import { eq } from "drizzle-orm"
 import { db } from "./db"
+import { member } from "./schema"
+
+const statement = {
+  organization: ["update", "delete"],
+  member: ["create", "update", "delete"],
+  invitation: ["create", "cancel"],
+  machine: ["create", "update", "delete", "view"],
+  dashboard: ["create", "update", "delete", "view"],
+  alert: ["view", "acknowledge"],
+} as const
+
+const ac = createAccessControl(statement)
+
+const ownerRole = ac.newRole({
+  organization: ["update", "delete"],
+  member: ["create", "update", "delete"],
+  invitation: ["create", "cancel"],
+  machine: ["create", "update", "delete", "view"],
+  dashboard: ["create", "update", "delete", "view"],
+  alert: ["view", "acknowledge"],
+})
+
+const adminRole = ac.newRole({
+  member: ["create", "update"],
+  invitation: ["create"],
+  machine: ["create", "update", "delete", "view"],
+  dashboard: ["create", "update", "view"],
+  alert: ["view", "acknowledge"],
+})
+
+const memberRole = ac.newRole({
+  machine: ["view"],
+  dashboard: ["view"],
+  alert: ["view"],
+})
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -20,6 +58,51 @@ export const auth = betterAuth({
       // Log verification URL to terminal (no email integration yet)
       // eslint-disable-next-line no-console
       console.log(`\n${"=".repeat(60)}\nEMAIL VERIFICATION\nUser: ${user.email}\nVerification URL: ${url}\n${"=".repeat(60)}\n`)
+    },
+  },
+  plugins: [
+    organization({
+      ac,
+      roles: {
+        owner: ownerRole,
+        admin: adminRole,
+        member: memberRole,
+      },
+      allowUserToCreateOrganization: true,
+      creatorRole: "owner",
+      organizationLimit: 1,
+      sendInvitationEmail: async (data) => {
+        // Log invitation to terminal (no email integration yet)
+        // eslint-disable-next-line no-console
+        console.log(
+          `\n${"=".repeat(60)}\nORGANIZATION INVITATION\nEmail: ${data.email}\nOrganization: ${data.organization.name}\nRole: ${data.role}\nInvitation ID: ${data.id}\n${"=".repeat(60)}\n`
+        )
+      },
+    }),
+  ],
+  databaseHooks: {
+    session: {
+      create: {
+        before: async (session) => {
+          const memberships = await db
+            .select()
+            .from(member)
+            .where(eq(member.userId, session.userId))
+            .limit(1)
+
+          const firstMembership = memberships[0]
+          if (firstMembership) {
+            return {
+              data: {
+                ...session,
+                activeOrganizationId: firstMembership.organizationId,
+              },
+            }
+          }
+
+          return { data: session }
+        },
+      },
     },
   },
 })
