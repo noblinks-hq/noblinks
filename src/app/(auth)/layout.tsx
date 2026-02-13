@@ -1,7 +1,16 @@
+import { SiteFooter } from "@/components/site-footer"
+import { SiteHeader } from "@/components/site-header"
+
 export default function AuthLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  return <>{children}</>
+  return (
+    <>
+      <SiteHeader />
+      <main id="main-content">{children}</main>
+      <SiteFooter />
+    </>
+  )
 }

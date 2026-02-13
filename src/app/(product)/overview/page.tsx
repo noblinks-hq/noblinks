@@ -16,24 +16,6 @@ import { useNoblinks } from "@/context/noblinks-context";
 import { generateTimeSeriesData } from "@/lib/mock-data";
 import type { Widget } from "@/lib/types";
 
-const cpuChart: Widget = {
-  id: "overview-cpu",
-  machineId: "",
-  type: "timeseries",
-  title: "CPU Usage (24h)",
-  metric: "cpu_usage_percent",
-  data: generateTimeSeriesData(24, 15, 65),
-};
-
-const memoryChart: Widget = {
-  id: "overview-memory",
-  machineId: "",
-  type: "timeseries",
-  title: "Memory Usage (24h)",
-  metric: "memory_usage_percent",
-  data: generateTimeSeriesData(24, 40, 75),
-};
-
 const aiSuggestions = [
   {
     text: "Docker storage trending upward on prod-api-1",
@@ -52,9 +34,33 @@ const aiSuggestions = [
 export default function OverviewPage() {
   const { machines, alerts, widgets } = useNoblinks();
   const [mounted, setMounted] = useState(false);
+  const [charts, setCharts] = useState<{ cpu: Widget; memory: Widget } | null>(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => setMounted(true), 400);
+    // Delay to show skeleton loading state, then generate chart data.
+    // Chart data uses Math.random / Date.now / toLocaleTimeString which
+    // differ between server & client, so it must be client-only.
+    const timer = setTimeout(() => {
+      setCharts({
+        cpu: {
+          id: "overview-cpu",
+          machineId: "",
+          type: "timeseries",
+          title: "CPU Usage (24h)",
+          metric: "cpu_usage_percent",
+          data: generateTimeSeriesData(24, 15, 65),
+        },
+        memory: {
+          id: "overview-memory",
+          machineId: "",
+          type: "timeseries",
+          title: "Memory Usage (24h)",
+          metric: "memory_usage_percent",
+          data: generateTimeSeriesData(24, 40, 75),
+        },
+      });
+      setMounted(true);
+    }, 400);
     return () => clearTimeout(timer);
   }, []);
 
@@ -116,8 +122,8 @@ export default function OverviewPage() {
 
       {/* Charts */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <TimeSeriesWidget widget={cpuChart} />
-        <TimeSeriesWidget widget={memoryChart} />
+        {charts ? <TimeSeriesWidget widget={charts.cpu} /> : <Skeleton className="h-64 rounded-lg" />}
+        {charts ? <TimeSeriesWidget widget={charts.memory} /> : <Skeleton className="h-64 rounded-lg" />}
       </div>
 
       {/* Recent Alerts + AI Suggestions */}

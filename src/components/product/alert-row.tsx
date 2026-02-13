@@ -49,7 +49,7 @@ export function AlertRow({
           {alert.status === "triggered" ? "Triggered" : "Resolved"}
         </Badge>
       </td>
-      <td className="px-4 py-3 text-sm text-muted-foreground">
+      <td className="px-4 py-3 text-sm text-muted-foreground" suppressHydrationWarning>
         {timeAgo(alert.triggeredAt)}
       </td>
       <td className="px-4 py-3">

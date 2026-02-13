@@ -22,7 +22,9 @@
       "Bash(pnpm run lint:*)",
       "Bash(npx @better-auth/cli generate:*)",
       "Bash(pnpm run db:generate:*)",
-      "Bash(pnpm run db:migrate:*)"
+      "Bash(pnpm run db:migrate:*)",
+      "Bash(xargs:*)",
+      "Bash(node -e:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
