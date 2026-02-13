@@ -33,13 +33,29 @@ export async function requireAuth() {
  * @throws Redirects to /login if not authenticated, or /setup-organization if no active org
  */
 export async function requireOrgAuth() {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const reqHeaders = await headers();
+  const session = await auth.api.getSession({ headers: reqHeaders });
 
   if (!session) {
     redirect("/login");
   }
 
   if (!session.session.activeOrganizationId) {
+    // Check if user already has an organization (e.g. returning login)
+    const orgs = await auth.api.listOrganizations({ headers: reqHeaders });
+
+    if (orgs && orgs.length > 0) {
+      // Restore the first organization as active
+      await auth.api.setActiveOrganization({
+        headers: reqHeaders,
+        body: { organizationId: orgs[0]!.id },
+      });
+      // Re-fetch session so the caller gets the updated activeOrganizationId
+      const updated = await auth.api.getSession({ headers: reqHeaders });
+      if (updated) return updated;
+    }
+
+    // No organizations at all — first-time setup
     redirect("/setup-organization");
   }
 
