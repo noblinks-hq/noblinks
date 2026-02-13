@@ -91,7 +91,7 @@ export default function Home() {
         <div className="flex items-center justify-center gap-4 mt-12">
           <Button size="lg">Get Early Access</Button>
           <Button asChild variant="outline" size="lg">
-            <Link href="/dashboard">View Dashboard</Link>
+            <Link href="/overview">View Dashboard</Link>
           </Button>
         </div>
       </div>

@@ -206,22 +206,22 @@ Phase 0 (Foundations)
 
 ### Tasks
 
-- [ ] Create `src/app/(product)/machines/page.tsx`
-- [ ] Create `src/components/product/add-machine-modal.tsx`:
-  - [ ] Use existing `Dialog` component from `@/components/ui/dialog`
-  - [ ] Machine Name `Input` field (required)
-  - [ ] Machine Type dropdown using a `select` or `DropdownMenu`: Linux VM, Windows VM, Kubernetes Cluster
-  - [ ] On submit: call `addMachine()` from context, close modal
-- [ ] Create `src/components/product/machine-card.tsx`:
-  - [ ] Display: name, type `Badge`, status `Badge` (green "Online"), last seen text
-  - [ ] Entire card is clickable → navigates to `/machines/[id]`
-- [ ] Page layout:
-  - [ ] Header row: "Machines" title + "Add Machine" `Button`
-  - [ ] Grid of `MachineCard` components (`grid-cols-1 md:grid-cols-2 lg:grid-cols-3`)
-  - [ ] Empty state when no machines: "No machines connected. Add your first machine to get started."
-- [ ] Seed page with 2 pre-existing machines from context
-- [ ] Run `pnpm run lint` — confirm zero errors
-- [ ] Run `pnpm run typecheck` — confirm zero errors
+- [x] Create `src/app/(product)/machines/page.tsx`
+- [x] Create `src/components/product/add-machine-modal.tsx`:
+  - [x] Use existing `Dialog` component from `@/components/ui/dialog`
+  - [x] Machine Name `Input` field (required)
+  - [x] Machine Type dropdown using a `select` or `DropdownMenu`: Linux VM, Windows VM, Kubernetes Cluster
+  - [x] On submit: call `addMachine()` from context, close modal
+- [x] Create `src/components/product/machine-card.tsx`:
+  - [x] Display: name, type `Badge`, status `Badge` (green "Online"), last seen text
+  - [x] Entire card is clickable → navigates to `/machines/[id]`
+- [x] Page layout:
+  - [x] Header row: "Machines" title + "Add Machine" `Button`
+  - [x] Grid of `MachineCard` components (`grid-cols-1 md:grid-cols-2 lg:grid-cols-3`)
+  - [x] Empty state when no machines: "No machines connected. Add your first machine to get started."
+- [x] Seed page with 2 pre-existing machines from context
+- [x] Run `pnpm run lint` — confirm zero errors
+- [x] Run `pnpm run typecheck` — confirm zero errors
 
 ---
 
@@ -235,21 +235,21 @@ Phase 0 (Foundations)
 
 ### Tasks
 
-- [ ] Create `src/app/(product)/machines/[id]/page.tsx`
-- [ ] Page header:
-  - [ ] Breadcrumb: Machines → {Machine Name}
-  - [ ] Machine Name as `h1`
-  - [ ] Status `Badge` + Type `Badge` inline
-- [ ] Two-column layout:
-  - [ ] Left (2/3 width): widget area
-  - [ ] Right (1/3 width): AI chat panel
-- [ ] Widget area:
-  - [ ] When no widgets exist, show `EmptyState`: "This machine is not being monitored yet. Tell Noblinks what you care about."
-  - [ ] When widgets exist, render them in a `grid-cols-1 lg:grid-cols-2` grid
-- [ ] Create `src/components/product/empty-state.tsx` — reusable centered message with icon
-- [ ] On mobile: stack chat panel below widget area (single column)
-- [ ] Run `pnpm run lint` — confirm zero errors
-- [ ] Run `pnpm run typecheck` — confirm zero errors
+- [x] Create `src/app/(product)/machines/[id]/page.tsx`
+- [x] Page header:
+  - [x] Breadcrumb: Machines → {Machine Name}
+  - [x] Machine Name as `h1`
+  - [x] Status `Badge` + Type `Badge` inline
+- [x] Two-column layout:
+  - [x] Left (2/3 width): widget area
+  - [x] Right (1/3 width): AI chat panel
+- [x] Widget area:
+  - [x] When no widgets exist, show `EmptyState`: "This machine is not being monitored yet. Tell Noblinks what you care about."
+  - [x] When widgets exist, render them in a `grid-cols-1 lg:grid-cols-2` grid
+- [x] Create `src/components/product/empty-state.tsx` — reusable centered message with icon
+- [x] On mobile: stack chat panel below widget area (single column)
+- [x] Run `pnpm run lint` — confirm zero errors
+- [x] Run `pnpm run typecheck` — confirm zero errors
 
 ---
 
@@ -261,27 +261,27 @@ Phase 0 (Foundations)
 
 ### Tasks
 
-- [ ] Create `src/components/product/ai-chat-panel.tsx`:
-  - [ ] Fixed-height panel with scrollable message area + input at bottom
-  - [ ] User messages: right-aligned, primary background
-  - [ ] AI messages: left-aligned, muted background
-  - [ ] Typing indicator: 3-dot animation shown for 1 second before AI responds
-- [ ] Implement keyword detection in `handleSend`:
-  - [ ] Normalize input to lowercase
-  - [ ] Match against: `docker storage`, `disk filling`, `pods restart`, `cpu spike`
-  - [ ] If matched:
-    - [ ] Append user message to chat
-    - [ ] Show typing indicator (1s delay)
-    - [ ] Append canned AI response from `mock-data.ts`
-    - [ ] Call `addWidget()` from context with generated data for that keyword
-    - [ ] Call `addAlert()` from context with corresponding alert
-  - [ ] If not matched:
-    - [ ] Respond with fallback: "I can help you monitor that. Try asking about Docker storage, disk usage, CPU, or pod restarts."
-- [ ] Auto-scroll to bottom on new messages
-- [ ] Store chat messages in component state (not persisted — resets on navigation)
-- [ ] Pass `machineId` as prop so widgets and alerts are linked to the current machine
-- [ ] Run `pnpm run lint` — confirm zero errors
-- [ ] Run `pnpm run typecheck` — confirm zero errors
+- [x] Create `src/components/product/ai-chat-panel.tsx`:
+  - [x] Fixed-height panel with scrollable message area + input at bottom
+  - [x] User messages: right-aligned, primary background
+  - [x] AI messages: left-aligned, muted background
+  - [x] Typing indicator: 3-dot animation shown for 1 second before AI responds
+- [x] Implement keyword detection in `handleSend`:
+  - [x] Normalize input to lowercase
+  - [x] Match against: `docker storage`, `disk filling`, `pods restart`, `cpu spike`
+  - [x] If matched:
+    - [x] Append user message to chat
+    - [x] Show typing indicator (1s delay)
+    - [x] Append canned AI response from `mock-data.ts`
+    - [x] Call `addWidget()` from context with generated data for that keyword
+    - [x] Call `addAlert()` from context with corresponding alert
+  - [x] If not matched:
+    - [x] Respond with fallback: "I can help you monitor that. Try asking about Docker storage, disk usage, CPU, or pod restarts."
+- [x] Auto-scroll to bottom on new messages
+- [x] Store chat messages in component state (not persisted — resets on navigation)
+- [x] Pass `machineId` as prop so widgets and alerts are linked to the current machine
+- [x] Run `pnpm run lint` — confirm zero errors
+- [x] Run `pnpm run typecheck` — confirm zero errors
 
 ---
 
@@ -293,24 +293,24 @@ Phase 0 (Foundations)
 
 ### Tasks
 
-- [ ] Create `src/components/product/time-series-widget.tsx`:
-  - [ ] Card with title in header
-  - [ ] `recharts` `LineChart` with `ResponsiveContainer`
-  - [ ] X-axis: time labels, Y-axis: metric values
-  - [ ] Optional `ReferenceLine` for threshold (dashed, red)
-  - [ ] Use CSS variable chart colors (`--chart-1`, etc.)
-  - [ ] Card styling: `p-6 rounded-xl border`
-- [ ] Create `src/components/product/stat-widget.tsx`:
-  - [ ] Card with title, large number, and trend indicator (up/down arrow + percentage)
-  - [ ] Same card styling as timeseries widget
-- [ ] `generateTimeSeriesData()` in `mock-data.ts`:
-  - [ ] Generates 24 data points (simulating 24 hours)
-  - [ ] Values fluctuate realistically within min/max range
-  - [ ] Final 3–4 points trend upward to simulate the alert trigger
-- [ ] Verify widgets render inside the machine detail page grid when created by chat
-- [ ] Verify widgets look correct in both dark and light mode
-- [ ] Run `pnpm run lint` — confirm zero errors
-- [ ] Run `pnpm run typecheck` — confirm zero errors
+- [x] Create `src/components/product/time-series-widget.tsx`:
+  - [x] Card with title in header
+  - [x] `recharts` `LineChart` with `ResponsiveContainer`
+  - [x] X-axis: time labels, Y-axis: metric values
+  - [x] Optional `ReferenceLine` for threshold (dashed, red)
+  - [x] Use CSS variable chart colors (`--chart-1`, etc.)
+  - [x] Card styling: `p-6 rounded-lg border`
+- [x] Create `src/components/product/stat-widget.tsx`:
+  - [x] Card with title, large number, and trend indicator (up/down arrow + percentage)
+  - [x] Same card styling as timeseries widget
+- [x] `generateTimeSeriesData()` in `mock-data.ts`:
+  - [x] Generates 24 data points (simulating 24 hours)
+  - [x] Values fluctuate realistically within min/max range
+  - [x] Final 3–4 points trend upward to simulate the alert trigger
+- [x] Verify widgets render inside the machine detail page grid when created by chat
+- [ ] Verify widgets look correct in both dark and light mode *(manual)*
+- [x] Run `pnpm run lint` — confirm zero errors
+- [x] Run `pnpm run typecheck` — confirm zero errors
 
 ---
 
@@ -324,22 +324,22 @@ Phase 0 (Foundations)
 
 ### Tasks
 
-- [ ] Create `src/app/(product)/alerts/page.tsx`
-- [ ] Create `src/components/product/severity-badge.tsx`:
-  - [ ] `critical` → red `Badge` (destructive variant)
-  - [ ] `warning` → yellow/amber `Badge`
-  - [ ] `info` → blue `Badge` (secondary variant)
-- [ ] Create `src/components/product/alert-row.tsx`:
-  - [ ] Displays: title, severity badge, machine name, status badge, triggered time
-  - [ ] Clickable → navigates to `/alerts/[id]`
-  - [ ] Status toggle button: Triggered ↔ Resolved (calls `updateAlertStatus` from context)
-- [ ] Page layout:
-  - [ ] Header: "Alerts" title
-  - [ ] Table with column headers: Alert, Severity, Machine, Status, Triggered, Action
-  - [ ] Empty state when no alerts: "No alerts yet. Alerts will appear here when monitors detect issues."
-- [ ] Seed with 2–3 pre-existing alerts from mock data (linked to seed machines)
-- [ ] Run `pnpm run lint` — confirm zero errors
-- [ ] Run `pnpm run typecheck` — confirm zero errors
+- [x] Create `src/app/(product)/alerts/page.tsx`
+- [x] Create `src/components/product/severity-badge.tsx`:
+  - [x] `critical` → red `Badge` (destructive variant)
+  - [x] `warning` → yellow/amber `Badge`
+  - [x] `info` → blue `Badge` (secondary variant)
+- [x] Create `src/components/product/alert-row.tsx`:
+  - [x] Displays: title, severity badge, machine name, status badge, triggered time
+  - [x] Clickable → navigates to `/alerts/[id]`
+  - [x] Status toggle button: Triggered ↔ Resolved (calls `updateAlertStatus` from context)
+- [x] Page layout:
+  - [x] Header: "Alerts" title
+  - [x] Table with column headers: Alert, Severity, Machine, Status, Triggered, Action
+  - [x] Empty state when no alerts: "No alerts yet. Alerts will appear here when monitors detect issues."
+- [x] Seed with 2–3 pre-existing alerts from mock data (linked to seed machines)
+- [x] Run `pnpm run lint` — confirm zero errors
+- [x] Run `pnpm run typecheck` — confirm zero errors
 
 ---
 
@@ -353,21 +353,21 @@ Phase 0 (Foundations)
 
 ### Tasks
 
-- [ ] Create `src/app/(product)/alerts/[id]/page.tsx`
-- [ ] Page header:
-  - [ ] Breadcrumb: Alerts → {Alert Title}
-  - [ ] Alert title as `h1`
-  - [ ] Severity badge + Status badge inline
-  - [ ] Machine name as subtitle link (→ `/machines/[machineId]`)
-- [ ] Main content:
-  - [ ] `TimeSeriesWidget` showing the metric that triggered the alert, with threshold `ReferenceLine`
-  - [ ] AI explanation card: shows the alert `description` field in a highlighted panel (e.g. amber background for warning, red for critical)
-  - [ ] Timeline: "Triggered at {time}" → "AI analyzed" → "Suggested fix"
-- [ ] Action buttons:
-  - [ ] "Open Terminal" `Button` → navigates to `/alerts/[id]#terminal` or scrolls to terminal section
-  - [ ] "Mark Resolved" `Button` → calls `updateAlertStatus` from context
-- [ ] Run `pnpm run lint` — confirm zero errors
-- [ ] Run `pnpm run typecheck` — confirm zero errors
+- [x] Create `src/app/(product)/alerts/[id]/page.tsx`
+- [x] Page header:
+  - [x] Breadcrumb: Alerts → {Alert Title}
+  - [x] Alert title as `h1`
+  - [x] Severity badge + Status badge inline
+  - [x] Machine name as subtitle link (→ `/machines/[machineId]`)
+- [x] Main content:
+  - [x] `TimeSeriesWidget` showing the metric that triggered the alert, with threshold `ReferenceLine`
+  - [x] AI explanation card: shows the alert `description` field in a highlighted panel (e.g. amber background for warning, red for critical)
+  - [x] Timeline: "Triggered at {time}" → "AI analyzed" → "Suggested fix"
+- [x] Action buttons:
+  - [x] "Open Terminal" `Button` → scrolls to terminal section
+  - [x] "Mark Resolved" `Button` → calls `updateAlertStatus` from context
+- [x] Run `pnpm run lint` — confirm zero errors
+- [x] Run `pnpm run typecheck` — confirm zero errors
 
 ---
 
@@ -379,26 +379,26 @@ Phase 0 (Foundations)
 
 ### Tasks
 
-- [ ] Create `src/components/product/terminal-block.tsx`:
-  - [ ] Dark background (`bg-zinc-900`), monospace font (`font-mono`), rounded corners
-  - [ ] Renders a list of command + output pairs
-  - [ ] Command lines prefixed with `$` in green
-  - [ ] Output lines in gray/white
-  - [ ] Scrollable container with max height
-- [ ] Add terminal section to alert detail page (`/alerts/[id]`):
-  - [ ] Rendered below the chart and AI explanation
-  - [ ] Section title: "Terminal"
-  - [ ] Hardcoded commands based on alert type:
+- [x] Create `src/components/product/terminal-block.tsx`:
+  - [x] Dark background (`bg-zinc-900`), monospace font (`font-mono`), rounded corners
+  - [x] Renders a list of command + output pairs
+  - [x] Command lines prefixed with `$` in green
+  - [x] Output lines in gray/white
+  - [x] Scrollable container with max height
+- [x] Add terminal section to alert detail page (`/alerts/[id]`):
+  - [x] Rendered below the chart and AI explanation
+  - [x] Section title: "Terminal"
+  - [x] Hardcoded commands based on alert type:
     - Docker storage alert: `docker system df`, `docker image prune --dry-run`
     - Disk filling alert: `df -h`, `du -sh /var/lib/docker/*`
     - Pod restart alert: `kubectl get pods`, `kubectl describe pod {name}`
     - CPU spike alert: `top -bn1 | head -20`, `ps aux --sort=-%cpu | head -10`
-- [ ] Add AI guidance panel beside or below terminal:
-  - [ ] 2–3 contextual suggestions based on alert type
-  - [ ] Each suggestion is a card with icon + text
-  - [ ] Example: "Unused Docker images are consuming 4.2 GB. Run `docker image prune` to reclaim space."
-- [ ] Run `pnpm run lint` — confirm zero errors
-- [ ] Run `pnpm run typecheck` — confirm zero errors
+- [x] Add AI guidance panel beside or below terminal:
+  - [x] 2–3 contextual suggestions based on alert type
+  - [x] Each suggestion is a card with icon + text
+  - [x] Example: "Unused Docker images are consuming 4.2 GB. Run `docker image prune` to reclaim space."
+- [x] Run `pnpm run lint` — confirm zero errors
+- [x] Run `pnpm run typecheck` — confirm zero errors
 
 ---
 
@@ -412,25 +412,25 @@ Phase 0 (Foundations)
 
 ### Tasks
 
-- [ ] Create `src/app/(product)/overview/page.tsx`
-- [ ] Top stat cards row (`grid-cols-2 lg:grid-cols-4`):
-  - [ ] Machines Online — count from context, `Server` icon
-  - [ ] Active Alerts — count of `triggered` alerts from context, `AlertTriangle` icon
-  - [ ] Total Monitors — count of all widgets from context, `Activity` icon
-  - [ ] AI Suggestions — hardcoded "3", `Sparkles` icon
-- [ ] Charts section (`grid-cols-1 lg:grid-cols-2`):
-  - [ ] CPU Usage (24h) — `TimeSeriesWidget` with seed data
-  - [ ] Memory Usage (24h) — `TimeSeriesWidget` with seed data
-- [ ] Recent Alerts section:
-  - [ ] List last 5 alerts from context using `AlertRow` component
-  - [ ] "View all alerts" link → `/alerts`
-- [ ] AI Suggestions box:
-  - [ ] Card with `Sparkles` icon header
-  - [ ] 2–3 hardcoded suggestions: "Docker storage trending upward on prod-api-1", "Pod restarts detected on k8s-cluster-1"
-  - [ ] Each suggestion clickable → navigates to relevant machine or alert
-- [ ] Update landing page "View Dashboard" link from `/dashboard` to `/overview`
-- [ ] Run `pnpm run lint` — confirm zero errors
-- [ ] Run `pnpm run typecheck` — confirm zero errors
+- [x] Create `src/app/(product)/overview/page.tsx`
+- [x] Top stat cards row (`grid-cols-2 lg:grid-cols-4`):
+  - [x] Machines Online — count from context, `Server` icon
+  - [x] Active Alerts — count of `triggered` alerts from context, `AlertTriangle` icon
+  - [x] Total Monitors — count of all widgets from context, `Activity` icon
+  - [x] AI Suggestions — hardcoded "3", `Sparkles` icon
+- [x] Charts section (`grid-cols-1 lg:grid-cols-2`):
+  - [x] CPU Usage (24h) — `TimeSeriesWidget` with seed data
+  - [x] Memory Usage (24h) — `TimeSeriesWidget` with seed data
+- [x] Recent Alerts section:
+  - [x] List last 5 alerts from context using `AlertRow` component
+  - [x] "View all alerts" link → `/alerts`
+- [x] AI Suggestions box:
+  - [x] Card with `Sparkles` icon header
+  - [x] 2–3 hardcoded suggestions: "Docker storage trending upward on prod-api-1", "Pod restarts detected on k8s-cluster-1"
+  - [x] Each suggestion clickable → navigates to relevant machine or alert
+- [x] Update landing page "View Dashboard" link from `/dashboard` to `/overview`
+- [x] Run `pnpm run lint` — confirm zero errors
+- [x] Run `pnpm run typecheck` — confirm zero errors
 
 ---
 
@@ -444,22 +444,22 @@ Phase 0 (Foundations)
 
 ### Tasks
 
-- [ ] Create `src/app/(product)/settings/page.tsx`
-- [ ] Organization section (card):
-  - [ ] Organization Name — static `Input` with value "My Organization"
-  - [ ] Plan — `Badge` showing "Free"
-  - [ ] "Upgrade Plan" `Button` (outline variant, disabled or no-op)
-- [ ] Notifications section (card):
-  - [ ] Email field — static `Input` with placeholder email
-  - [ ] Alert channels label — "Email only" with muted text
-- [ ] Connected Machines section (card):
-  - [ ] Count of machines from context
-  - [ ] "Manage Machines" link → `/machines`
-- [ ] Danger Zone section (card with red/destructive border):
-  - [ ] "Delete Organization" `Button` (destructive variant, disabled)
-- [ ] All fields are static/read-only — no save functionality
-- [ ] Run `pnpm run lint` — confirm zero errors
-- [ ] Run `pnpm run typecheck` — confirm zero errors
+- [x] Create `src/app/(product)/settings/page.tsx`
+- [x] Organization section (card):
+  - [x] Organization Name — static `Input` with value "My Organization"
+  - [x] Plan — `Badge` showing "Free"
+  - [x] "Upgrade Plan" `Button` (outline variant, disabled)
+- [x] Notifications section (card):
+  - [x] Email field — static `Input` with placeholder email
+  - [x] Alert channels label — "Email only" with muted text
+- [x] Connected Machines section (card):
+  - [x] Count of machines from context
+  - [x] "Manage Machines" link → `/machines`
+- [x] Danger Zone section (card with red/destructive border):
+  - [x] "Delete Organization" `Button` (destructive variant, disabled)
+- [x] All fields are static/read-only — no save functionality
+- [x] Run `pnpm run lint` — confirm zero errors
+- [x] Run `pnpm run typecheck` — confirm zero errors
 
 ---
 
@@ -471,27 +471,27 @@ Phase 0 (Foundations)
 
 ### Tasks
 
-- [ ] Consistent spacing: all page content uses `space-y-6` or `space-y-8` top-level
-- [ ] Consistent card styling: all cards use `border rounded-lg` (not mixed `rounded-xl` / `rounded-lg`)
-- [ ] Responsive checks:
-  - [ ] Sidebar collapses below `md`
-  - [ ] Grids fall to single column on mobile
-  - [ ] Chat panel stacks below content on mobile
-  - [ ] Tables scroll horizontally on mobile
-- [ ] Dark mode checks:
+- [x] Consistent spacing: all page content uses `space-y-6` or `space-y-8` top-level
+- [x] Consistent card styling: all cards use `border rounded-lg` (not mixed `rounded-xl` / `rounded-lg`)
+- [x] Responsive checks:
+  - [x] Sidebar collapses below `md`
+  - [x] Grids fall to single column on mobile
+  - [x] Chat panel stacks below content on mobile
+  - [x] Tables scroll horizontally on mobile
+- [ ] Dark mode checks: *(manual)*
   - [ ] All pages render without color issues
   - [ ] Terminal block is readable in both modes
   - [ ] Charts use CSS variable colors (auto-adapt to theme)
   - [ ] Badges are legible in both modes
-- [ ] Loading states:
-  - [ ] Add `Skeleton` loaders on overview stat cards (brief flash on mount)
-- [ ] Empty states verified:
-  - [ ] Machines page with no machines
-  - [ ] Alerts page with no alerts
-  - [ ] Machine detail with no widgets
-- [ ] No console warnings or errors
-- [ ] Run `pnpm run lint` — confirm zero errors
-- [ ] Run `pnpm run typecheck` — confirm zero errors
+- [x] Loading states:
+  - [x] Add `Skeleton` loaders on overview stat cards (brief flash on mount)
+- [x] Empty states verified:
+  - [x] Machines page with no machines
+  - [x] Alerts page with no alerts
+  - [x] Machine detail with no widgets
+- [ ] No console warnings or errors *(manual)*
+- [x] Run `pnpm run lint` — confirm zero errors
+- [x] Run `pnpm run typecheck` — confirm zero errors
 
 ---
 
