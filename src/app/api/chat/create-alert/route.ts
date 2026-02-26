@@ -15,32 +15,32 @@ const aiAlertSchema = z.object({
   matched: z.boolean().describe("Whether a matching capability was found"),
   capabilityKey: z
     .string()
-    .optional()
-    .describe("The matching capability key from the list"),
+    .nullable()
+    .describe("The matching capability key from the list, or null if not matched"),
   params: z
-    .object({
+    .strictObject({
       machine: z.string().describe("Target machine name/instance"),
       threshold: z.number().describe("Alert threshold value"),
       window: z.string().describe("Time window duration like 5m, 1h, 30s"),
     })
-    .optional()
-    .describe("Extracted parameters from the user message"),
+    .nullable()
+    .describe("Extracted parameters from the user message, or null if not matched"),
   severity: z
     .enum(["critical", "warning", "info"])
-    .optional()
-    .describe("Alert severity level"),
+    .nullable()
+    .describe("Alert severity level, or null if not matched"),
   alertName: z
     .string()
-    .optional()
-    .describe("Human-readable name for the alert"),
+    .nullable()
+    .describe("Human-readable name for the alert, or null if not matched"),
   description: z
     .string()
-    .optional()
-    .describe("Brief description of what this alert monitors"),
+    .nullable()
+    .describe("Brief description of what this alert monitors, or null if not matched"),
   noMatchReason: z
     .string()
-    .optional()
-    .describe("Explanation of why no capability matched, if matched is false"),
+    .nullable()
+    .describe("Explanation of why no capability matched (if matched is false), or null if matched"),
 });
 
 function buildSystemPrompt(
@@ -126,35 +126,75 @@ export async function POST(req: Request) {
       system: buildSystemPrompt(capabilities),
       prompt,
     });
-  } catch {
+  } catch (err: unknown) {
+    console.error("AI generateObject failed:", err);
+
+    const statusCode =
+      err instanceof Error && "statusCode" in err
+        ? (err as Error & { statusCode: number }).statusCode
+        : undefined;
+    const message =
+      err instanceof Error ? err.message : "Unknown error";
+
+    if (statusCode === 401 || message.includes("Incorrect API key")) {
+      return Response.json(
+        { error: "Invalid AI API key. Check your OPENAI_API_KEY or OPENROUTER_API_KEY in .env.", errorType: "auth" },
+        { status: 401 }
+      );
+    }
+
+    if (statusCode === 429) {
+      return Response.json(
+        { error: "AI rate limit exceeded. Please wait a moment and try again.", errorType: "rate_limit" },
+        { status: 429 }
+      );
+    }
+
+    if (
+      message.includes("fetch failed") ||
+      message.includes("ECONNREFUSED") ||
+      message.includes("ETIMEDOUT") ||
+      message.includes("network")
+    ) {
+      return Response.json(
+        { error: "Could not reach the AI provider. Check your network connection and try again.", errorType: "network" },
+        { status: 502 }
+      );
+    }
+
+    const detail = process.env.NODE_ENV === "development" ? message : undefined;
     return Response.json(
-      { error: "AI processing failed. Please try again." },
+      { error: "AI processing failed unexpectedly. Please try again.", errorType: "unknown", detail },
       { status: 502 }
     );
   }
 
   const aiResult = result.object;
+  const availableCapabilities = capabilities.map((c) => ({
+    key: c.capabilityKey,
+    name: c.name,
+    description: c.description,
+    category: c.category,
+  }));
 
   // Handle no match
   if (!aiResult.matched) {
     return Response.json({
       matched: false,
-      noMatchReason: aiResult.noMatchReason || "Could not match your request to any available capability.",
-      availableCapabilities: capabilities.map((c) => ({
-        key: c.capabilityKey,
-        name: c.name,
-        description: c.description,
-        category: c.category,
-      })),
+      errorType: "no_match",
+      noMatchReason: aiResult.noMatchReason || "Could not match your request to any available monitoring capability.",
+      availableCapabilities,
     });
   }
 
   // Validate the AI-selected capability actually exists
   if (!aiResult.capabilityKey || !aiResult.params) {
-    return Response.json(
-      { error: "AI returned incomplete response. Please try again." },
-      { status: 502 }
-    );
+    return Response.json({
+      matched: false,
+      errorType: "incomplete",
+      noMatchReason: "AI could not fully interpret your request. Try rephrasing with a specific metric, machine name, and threshold.",
+      availableCapabilities,
+    });
   }
 
   const [capability] = await db
@@ -165,13 +205,9 @@ export async function POST(req: Request) {
   if (!capability) {
     return Response.json({
       matched: false,
-      noMatchReason: `AI selected an invalid capability "${aiResult.capabilityKey}". Please try again.`,
-      availableCapabilities: capabilities.map((c) => ({
-        key: c.capabilityKey,
-        name: c.name,
-        description: c.description,
-        category: c.category,
-      })),
+      errorType: "invalid_capability",
+      noMatchReason: `AI matched "${aiResult.capabilityKey}" which is not a valid capability. Try rephrasing your request.`,
+      availableCapabilities,
     });
   }
 

@@ -1,4 +1,3 @@
-import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { LanguageModel } from "ai";
 
@@ -29,15 +28,19 @@ export function getAIModel(): LanguageModel {
   const provider = getActiveAIProvider();
 
   if (provider === "openai") {
-    const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY! });
-    return openai(process.env.OPENAI_MODEL || "gpt-4o-mini") as unknown as LanguageModel;
+    const openai = createOpenRouter({
+      baseURL: "https://api.openai.com/v1",
+      apiKey: process.env.OPENAI_API_KEY!,
+      compatibility: "compatible",
+    });
+    return openai(process.env.OPENAI_MODEL || "gpt-4o-mini");
   }
 
   if (provider === "openrouter") {
     const openrouter = createOpenRouter({
       apiKey: process.env.OPENROUTER_API_KEY!,
     });
-    return openrouter(process.env.OPENROUTER_MODEL || "openai/gpt-5-mini") as unknown as LanguageModel;
+    return openrouter(process.env.OPENROUTER_MODEL || "openai/gpt-5-mini");
   }
 
   throw new Error("No AI provider configured. Set OPENAI_API_KEY or OPENROUTER_API_KEY.");

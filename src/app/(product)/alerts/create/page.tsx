@@ -39,6 +39,7 @@ interface AiResult {
   severity?: string;
   alertName?: string;
   description?: string;
+  errorType?: string;
   noMatchReason?: string;
   availableCapabilities?: {
     key: string;
@@ -49,6 +50,7 @@ interface AiResult {
 }
 
 type Step = "input" | "analyzing" | "review" | "creating" | "success" | "error";
+type ErrorKind = "api" | "no_match";
 
 const SEVERITY_OPTIONS: AlertSeverity[] = ["critical", "warning", "info"];
 
@@ -58,6 +60,7 @@ export default function CreateAlertPage() {
   const [prompt, setPrompt] = useState("");
   const [aiResult, setAiResult] = useState<AiResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [errorKind, setErrorKind] = useState<ErrorKind>("api");
 
   // Editable fields (initialized from AI result)
   const [editThreshold, setEditThreshold] = useState(80);
@@ -81,7 +84,11 @@ export default function CreateAlertPage() {
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to analyze your request");
+        setErrorKind("api");
+        const msg = data.detail
+          ? `${data.error}\n\nDetail: ${data.detail}`
+          : data.error || "Failed to analyze your request";
+        throw new Error(msg);
       }
 
       const data: AiResult = await res.json();
@@ -93,12 +100,14 @@ export default function CreateAlertPage() {
         setEditSeverity((data.severity || "warning") as AlertSeverity);
         setStep("review");
       } else {
+        setErrorKind("no_match");
         setErrorMessage(
           data.noMatchReason || "Could not match your request to any capability."
         );
         setStep("error");
       }
     } catch (err) {
+      if (!errorKind) setErrorKind("api");
       setErrorMessage(
         err instanceof Error ? err.message : "Something went wrong"
       );
@@ -154,6 +163,7 @@ export default function CreateAlertPage() {
     setPrompt("");
     setAiResult(null);
     setErrorMessage("");
+    setErrorKind("api");
     setEditing(false);
     setDuplicateWarning("");
   }
@@ -445,8 +455,32 @@ export default function CreateAlertPage() {
         </Card>
       )}
 
-      {/* Step: Error / No Match */}
-      {step === "error" && (
+      {/* Step: Error — API / provider failure */}
+      {step === "error" && errorKind === "api" && (
+        <Card className="mx-auto max-w-2xl">
+          <CardContent className="space-y-4 py-8">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
+                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <p className="font-semibold">AI service error</p>
+                <p className="text-sm text-muted-foreground">{errorMessage}</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <Button onClick={handleReset}>Try Again</Button>
+              <Button variant="outline" onClick={() => router.push("/alerts")}>
+                Back to Alerts
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Step: Error — No matching capability */}
+      {step === "error" && errorKind === "no_match" && (
         <Card className="mx-auto max-w-2xl">
           <CardContent className="space-y-4 py-8">
             <div className="flex items-start gap-3">
@@ -454,17 +488,16 @@ export default function CreateAlertPage() {
                 <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
-                <p className="font-semibold">Couldn&apos;t create alert</p>
+                <p className="font-semibold">No matching capability</p>
                 <p className="text-sm text-muted-foreground">{errorMessage}</p>
               </div>
             </div>
 
-            {/* Show available capabilities if it was a no-match */}
             {aiResult?.availableCapabilities &&
               aiResult.availableCapabilities.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-sm font-medium">
-                    Available capabilities:
+                    Try describing an alert using one of these capabilities:
                   </p>
                   <div className="grid gap-2">
                     {aiResult.availableCapabilities.map((cap) => (
