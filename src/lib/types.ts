@@ -57,3 +57,41 @@ export interface Widget {
   data: TimeSeriesPoint[];
   thresholdValue?: number;
 }
+
+// --- AI Capability Registry types ---
+
+export type CapabilityCategory = "linux" | "kubernetes" | "docker" | "windows";
+export type DbAlertStatus = "configured" | "active" | "firing" | "resolved";
+
+export interface MonitoringCapability {
+  id: string;
+  capabilityKey: string;
+  name: string;
+  description: string;
+  category: CapabilityCategory;
+  metric: string;
+  parameters: Record<string, string>;
+  alertTemplate: string;
+  defaultThreshold: number;
+  defaultWindow: string;
+  suggestedSeverity: AlertSeverity;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DbAlert {
+  id: string;
+  organizationId: string;
+  name: string;
+  description: string | null;
+  capabilityId: string;
+  machine: string;
+  threshold: number;
+  window: string;
+  severity: AlertSeverity;
+  promqlQuery: string;
+  status: DbAlertStatus;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}

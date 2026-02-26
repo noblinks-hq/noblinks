@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,15 @@ const aiInsights: AiInsight[] = [
   },
 ];
 
+interface DbAlertRow {
+  id: string;
+  name: string;
+  machine: string;
+  severity: string;
+  status: string;
+  createdAt: string;
+}
+
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diff / 60000);
@@ -45,14 +55,22 @@ function timeAgo(iso: string): string {
 }
 
 export default function OverviewPage() {
-  const { machines, alerts } = useNoblinks();
+  const { machines } = useNoblinks();
+  const [dbAlerts, setDbAlerts] = useState<DbAlertRow[]>([]);
 
-  const firingAlerts = alerts.filter((a) => a.status === "triggered");
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/alerts")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setDbAlerts(data.alerts);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const firingAlerts = dbAlerts.filter((a) => a.status === "firing");
   const offlineMachines = machines.filter((m) => m.status === "offline");
-
-  function getMachineName(machineId: string): string {
-    return machines.find((m) => m.id === machineId)?.name ?? "Unknown";
-  }
 
   const allClear =
     firingAlerts.length === 0 &&
@@ -76,13 +94,13 @@ export default function OverviewPage() {
                   className={`h-2.5 w-2.5 shrink-0 rounded-full ${severityDotColor[alert.severity] ?? "bg-gray-400"}`}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium">{alert.title}</p>
+                  <p className="font-medium">{alert.name}</p>
                   <p
                     className="mt-0.5 text-sm text-muted-foreground"
                     suppressHydrationWarning
                   >
-                    {getMachineName(alert.machineId)} &middot; Triggered{" "}
-                    {timeAgo(alert.triggeredAt)}
+                    {alert.machine} &middot; Created{" "}
+                    {timeAgo(alert.createdAt)}
                   </p>
                 </div>
                 <Button variant="ghost" size="sm" asChild>

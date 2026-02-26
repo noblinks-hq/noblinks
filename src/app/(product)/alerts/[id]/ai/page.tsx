@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Bot } from "lucide-react";
 import {
@@ -9,7 +9,25 @@ import {
 } from "@/components/product/alert-ai-chat";
 import { SeverityBadge } from "@/components/product/severity-badge";
 import { Badge } from "@/components/ui/badge";
-import { useNoblinks } from "@/context/noblinks-context";
+import { Spinner } from "@/components/ui/spinner";
+import type { AlertSeverity, DbAlertStatus } from "@/lib/types";
+
+interface AlertDetail {
+  id: string;
+  name: string;
+  description: string | null;
+  machine: string;
+  severity: string;
+  status: string;
+  createdAt: string;
+}
+
+const statusLabels: Record<DbAlertStatus, string> = {
+  configured: "Configured",
+  active: "Active",
+  firing: "Firing",
+  resolved: "Resolved",
+};
 
 export default function AlertAiPage({
   params,
@@ -17,9 +35,32 @@ export default function AlertAiPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { alerts, machines } = useNoblinks();
+  const [alert, setAlert] = useState<AlertDetail | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const alert = alerts.find((a) => a.id === id);
+  const fetchAlert = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/alerts/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAlert(data.alert);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchAlert();
+  }, [fetchAlert]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
 
   if (!alert) {
     return (
@@ -32,41 +73,40 @@ export default function AlertAiPage({
     );
   }
 
-  const machine = machines.find((m) => m.id === alert.machineId);
-  const machineName = machine?.name ?? "Unknown";
-
   const alertContext: AlertContext = {
     alertId: alert.id,
-    title: alert.title,
-    description: alert.description,
+    title: alert.name,
+    description: alert.description || "No description available",
     severity: alert.severity,
     status: alert.status,
-    machineName,
-    triggeredAt: alert.triggeredAt,
+    machineName: alert.machine,
+    triggeredAt: alert.createdAt,
   };
+
+  const statusLabel = statusLabels[alert.status as DbAlertStatus] ?? alert.status;
 
   const header = (
     <div className="space-y-2">
       <Link
         href={`/alerts/${id}`}
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to alert
       </Link>
       <div className="flex items-center gap-3">
         <Bot className="h-5 w-5 text-primary" />
-        <h1 className="text-lg font-semibold">{alert.title}</h1>
-        <SeverityBadge severity={alert.severity} />
+        <h1 className="text-lg font-semibold">{alert.name}</h1>
+        <SeverityBadge severity={alert.severity as AlertSeverity} />
         <Badge
-          variant={alert.status === "triggered" ? "destructive" : "secondary"}
+          variant={alert.status === "firing" ? "destructive" : "secondary"}
         >
-          {alert.status === "triggered" ? "Triggered" : "Resolved"}
+          {statusLabel}
         </Badge>
       </div>
       <p className="text-xs text-muted-foreground">
-        Machine: {machineName} &middot; Triggered:{" "}
-        {new Date(alert.triggeredAt).toLocaleString()}
+        Machine: {alert.machine} &middot; Created:{" "}
+        {new Date(alert.createdAt).toLocaleString()}
       </p>
     </div>
   );

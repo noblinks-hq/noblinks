@@ -8,7 +8,6 @@ import {
 } from "react";
 import {
   seedMachines,
-  seedAlerts,
   seedWidgets,
 } from "@/lib/mock-data";
 import type { Machine, Alert, Widget, AlertStatus } from "@/lib/types";
@@ -23,7 +22,7 @@ interface NoblinksState {
 
 const initialState: NoblinksState = {
   machines: seedMachines,
-  alerts: seedAlerts,
+  alerts: [],
   widgets: seedWidgets,
 };
 

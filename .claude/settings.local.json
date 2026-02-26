@@ -31,7 +31,9 @@
       "Bash(git -C /home/rashid/noblinks status)",
       "Bash(git -C /home/rashid/noblinks diff)",
       "Bash(git -C /home/rashid/noblinks add -A)",
-      "Bash(git -C:*)"
+      "Bash(git -C:*)",
+      "Bash(pnpm run db:push:*)",
+      "Bash(pnpm run db:seed:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -1,20 +1,55 @@
 "use client";
 
-import { use } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ChevronRight,
-  CheckCircle,
-  Clock,
-  Sparkles,
   Bot,
+  Code,
+  Server,
+  Gauge,
+  Clock,
+  ShieldAlert,
+  Trash2,
 } from "lucide-react";
 import { SeverityBadge } from "@/components/product/severity-badge";
-import { TimeSeriesWidget } from "@/components/product/time-series-widget";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useNoblinks } from "@/context/noblinks-context";
-import { generateTimeSeriesData } from "@/lib/mock-data";
+import { Spinner } from "@/components/ui/spinner";
+import type { AlertSeverity, DbAlertStatus } from "@/lib/types";
+
+interface AlertDetail {
+  id: string;
+  name: string;
+  description: string | null;
+  machine: string;
+  severity: string;
+  status: string;
+  threshold: number;
+  window: string;
+  promqlQuery: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CapabilityDetail {
+  id: string;
+  name: string;
+  capabilityKey: string;
+  category: string;
+}
+
+const statusConfig: Record<
+  DbAlertStatus,
+  { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
+> = {
+  configured: { label: "Configured (Not Deployed)", variant: "outline" },
+  active: { label: "Active", variant: "default" },
+  firing: { label: "Firing", variant: "destructive" },
+  resolved: { label: "Resolved", variant: "secondary" },
+};
 
 export default function AlertDetailPage({
   params,
@@ -22,46 +57,75 @@ export default function AlertDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { alerts, machines, widgets, updateAlertStatus } = useNoblinks();
+  const router = useRouter();
+  const [alert, setAlert] = useState<AlertDetail | null>(null);
+  const [capability, setCapability] = useState<CapabilityDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
-  const alert = alerts.find((a) => a.id === id);
+  const fetchAlert = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/alerts/${id}`);
+      if (!res.ok) {
+        setNotFound(true);
+        return;
+      }
+      const data = await res.json();
+      setAlert(data.alert);
+      setCapability(data.capability);
+    } catch {
+      setNotFound(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
 
-  if (!alert) {
+  useEffect(() => {
+    fetchAlert();
+  }, [fetchAlert]);
+
+  async function handleStatusChange(newStatus: string) {
+    const res = await fetch(`/api/alerts/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setAlert(data.alert);
+    }
+  }
+
+  async function handleDelete() {
+    const res = await fetch(`/api/alerts/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      router.push("/alerts");
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  if (notFound || !alert) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">Alert not found</h1>
         <p className="text-muted-foreground">
           This alert doesn&apos;t exist or has been removed.
         </p>
+        <Button variant="outline" asChild>
+          <Link href="/alerts">Back to Alerts</Link>
+        </Button>
       </div>
     );
   }
 
-  const machine = machines.find((m) => m.id === alert.machineId);
-  const machineName = machine?.name ?? "Unknown";
-
-  // Find a matching widget for this alert's machine, or generate a fallback
-  const matchingWidget = widgets.find(
-    (w) => w.machineId === alert.machineId
-  );
-  const chartWidget = matchingWidget ?? {
-    id: "alert-chart",
-    machineId: alert.machineId,
-    type: "timeseries" as const,
-    title: "Metric",
-    metric: "unknown",
-    data: generateTimeSeriesData(24, 20, 90, true),
-    thresholdValue: 80,
-  };
-
-  const severityColors: Record<string, string> = {
-    critical: "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400",
-    warning:
-      "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-    info: "border-blue-500/50 bg-blue-500/10 text-blue-700 dark:text-blue-400",
-  };
-
-  const triggeredTime = new Date(alert.triggeredAt).toLocaleString();
+  const cfg = statusConfig[alert.status as DbAlertStatus] ?? statusConfig.configured;
 
   return (
     <div className="space-y-6">
@@ -71,103 +135,114 @@ export default function AlertDetailPage({
           Alerts
         </Link>
         <ChevronRight className="h-4 w-4" />
-        <span className="line-clamp-1 text-foreground">{alert.title}</span>
+        <span className="line-clamp-1 text-foreground">{alert.name}</span>
       </nav>
 
       {/* Header */}
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold">{alert.title}</h1>
-          <SeverityBadge severity={alert.severity} />
-          <Badge
-            variant={
-              alert.status === "triggered" ? "destructive" : "secondary"
-            }
-          >
-            {alert.status === "triggered" ? "Triggered" : "Resolved"}
-          </Badge>
+          <h1 className="text-2xl font-bold">{alert.name}</h1>
+          <SeverityBadge severity={alert.severity as AlertSeverity} />
+          <Badge variant={cfg.variant}>{cfg.label}</Badge>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Machine:{" "}
-          <Link
-            href={`/machines/${alert.machineId}`}
-            className="text-primary hover:underline"
-          >
-            {machineName}
-          </Link>
-        </p>
+        {alert.description && (
+          <p className="text-sm text-muted-foreground">{alert.description}</p>
+        )}
       </div>
 
       {/* Action buttons */}
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         <Button variant="outline" asChild>
           <Link href={`/alerts/${id}/ai`}>
             <Bot className="mr-2 h-4 w-4" />
             Open Noblinks AI
           </Link>
         </Button>
-        {alert.status === "triggered" ? (
-          <Button
-            onClick={() => updateAlertStatus(alert.id, "resolved")}
-          >
-            <CheckCircle className="mr-2 h-4 w-4" />
-            Mark Resolved
-          </Button>
-        ) : (
-          <Button
-            variant="outline"
-            onClick={() => updateAlertStatus(alert.id, "triggered")}
-          >
-            Reopen
+        {alert.status === "configured" && (
+          <Button onClick={() => handleStatusChange("active")}>
+            Activate
           </Button>
         )}
+        {alert.status === "firing" && (
+          <Button onClick={() => handleStatusChange("resolved")}>
+            Mark Resolved
+          </Button>
+        )}
+        {alert.status === "resolved" && (
+          <Button
+            variant="outline"
+            onClick={() => handleStatusChange("configured")}
+          >
+            Reconfigure
+          </Button>
+        )}
+        <Button variant="ghost" onClick={handleDelete}>
+          <Trash2 className="mr-2 h-4 w-4" />
+          Delete
+        </Button>
       </div>
 
-      {/* Chart */}
-      <TimeSeriesWidget widget={chartWidget} />
-
-      {/* AI Explanation */}
-      <div
-        className={`rounded-lg border p-4 ${severityColors[alert.severity] ?? severityColors.info}`}
-      >
-        <div className="mb-2 flex items-center gap-2 font-semibold">
-          <Bot className="h-4 w-4" />
-          AI Analysis
+      {/* Details Grid */}
+      <div className="rounded-lg border p-5">
+        <h3 className="mb-4 font-semibold">Alert Configuration</h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {capability && (
+            <div className="flex items-start gap-2">
+              <ShieldAlert className="mt-0.5 h-4 w-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Capability
+                </p>
+                <p className="text-sm">{capability.name}</p>
+              </div>
+            </div>
+          )}
+          <div className="flex items-start gap-2">
+            <Server className="mt-0.5 h-4 w-4 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">
+                Machine
+              </p>
+              <p className="text-sm">{alert.machine}</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-2">
+            <Gauge className="mt-0.5 h-4 w-4 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">
+                Threshold
+              </p>
+              <p className="text-sm">{alert.threshold}%</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-2">
+            <Clock className="mt-0.5 h-4 w-4 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">
+                Window
+              </p>
+              <p className="text-sm">{alert.window}</p>
+            </div>
+          </div>
         </div>
-        <p className="text-sm">{alert.description}</p>
       </div>
 
-      {/* Timeline */}
-      <div className="space-y-3">
-        <h3 className="font-semibold">Timeline</h3>
-        <div className="space-y-4 border-l-2 pl-4">
-          <div className="relative">
-            <div className="absolute -left-[1.3rem] top-0.5 h-3 w-3 rounded-full border-2 border-red-500 bg-background" />
-            <p className="text-sm font-medium">Triggered</p>
-            <p className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Clock className="h-3 w-3" />
-              {triggeredTime}
-            </p>
-          </div>
-          <div className="relative">
-            <div className="absolute -left-[1.3rem] top-0.5 h-3 w-3 rounded-full border-2 border-blue-500 bg-background" />
-            <p className="text-sm font-medium">AI analyzed the incident</p>
-            <p className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Sparkles className="h-3 w-3" />
-              Identified root cause and suggested fix
-            </p>
-          </div>
-          <div className="relative">
-            <div className="absolute -left-[1.3rem] top-0.5 h-3 w-3 rounded-full border-2 border-green-500 bg-background" />
-            <p className="text-sm font-medium">Suggested fix available</p>
-            <p className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Bot className="h-3 w-3" />
-              Open Noblinks AI to investigate
-            </p>
-          </div>
+      {/* PromQL Query */}
+      <div className="rounded-lg border p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <Code className="h-4 w-4 text-muted-foreground" />
+          <h3 className="font-semibold">PromQL Query</h3>
         </div>
+        <pre className="overflow-x-auto rounded-md bg-muted p-3 text-sm">
+          <code>{alert.promqlQuery}</code>
+        </pre>
       </div>
 
+      {/* Metadata */}
+      <div className="text-xs text-muted-foreground" suppressHydrationWarning>
+        Created {new Date(alert.createdAt).toLocaleString()} &middot; Last
+        updated {new Date(alert.updatedAt).toLocaleString()}
+      </div>
     </div>
   );
 }

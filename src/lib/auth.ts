@@ -10,7 +10,7 @@ const statement = {
   invitation: ["create", "cancel"],
   machine: ["create", "update", "delete", "view"],
   dashboard: ["create", "update", "delete", "view"],
-  alert: ["view", "acknowledge"],
+  alert: ["create", "update", "delete", "view", "acknowledge"],
 } as const
 
 const ac = createAccessControl(statement)
@@ -21,7 +21,7 @@ const ownerRole = ac.newRole({
   invitation: ["create", "cancel"],
   machine: ["create", "update", "delete", "view"],
   dashboard: ["create", "update", "delete", "view"],
-  alert: ["view", "acknowledge"],
+  alert: ["create", "update", "delete", "view", "acknowledge"],
 })
 
 const adminRole = ac.newRole({
@@ -29,7 +29,7 @@ const adminRole = ac.newRole({
   invitation: ["create"],
   machine: ["create", "update", "delete", "view"],
   dashboard: ["create", "update", "view"],
-  alert: ["view", "acknowledge"],
+  alert: ["create", "update", "delete", "view", "acknowledge"],
 })
 
 const memberRole = ac.newRole({

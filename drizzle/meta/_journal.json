@@ -29,6 +29,13 @@
       "when": 1771016315881,
       "tag": "0003_dizzy_ulik",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1772144552604,
+      "tag": "0004_cheerful_moon_knight",
+      "breakpoints": true
     }
   ]
 }

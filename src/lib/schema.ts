@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, integer, uuid, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, integer, uuid, jsonb, index } from "drizzle-orm/pg-core";
 
 // IMPORTANT! ID fields should ALWAYS use UUID types, EXCEPT the BetterAuth tables.
 
@@ -156,5 +156,66 @@ export const dashboard = pgTable(
   (table) => [
     index("dashboard_org_id_idx").on(table.organizationId),
     index("dashboard_created_by_idx").on(table.createdBy),
+  ]
+);
+
+export const monitoringCapability = pgTable(
+  "monitoring_capability",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    capabilityKey: text("capability_key").notNull().unique(),
+    name: text("name").notNull(),
+    description: text("description").notNull(),
+    category: text("category").notNull(), // linux | kubernetes | docker | windows
+    metric: text("metric").notNull(),
+    parameters: jsonb("parameters").notNull(), // { "machine": "string", "threshold": "number", "window": "duration" }
+    alertTemplate: text("alert_template").notNull(),
+    defaultThreshold: integer("default_threshold").default(80).notNull(),
+    defaultWindow: text("default_window").default("5m").notNull(),
+    suggestedSeverity: text("suggested_severity").default("warning").notNull(), // critical | warning | info
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("capability_key_idx").on(table.capabilityKey),
+    index("capability_category_idx").on(table.category),
+  ]
+);
+
+export const alert = pgTable(
+  "alert",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    capabilityId: uuid("capability_id")
+      .notNull()
+      .references(() => monitoringCapability.id),
+    machine: text("machine").notNull(),
+    threshold: integer("threshold").notNull(),
+    window: text("window").notNull(),
+    severity: text("severity").default("warning").notNull(), // critical | warning | info
+    promqlQuery: text("promql_query").notNull(),
+    status: text("status").default("configured").notNull(), // configured | active | firing | resolved
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("alert_org_id_idx").on(table.organizationId),
+    index("alert_capability_id_idx").on(table.capabilityId),
+    index("alert_created_by_idx").on(table.createdBy),
+    index("alert_status_idx").on(table.status),
   ]
 );
