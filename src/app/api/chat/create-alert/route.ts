@@ -1,8 +1,8 @@
 import { headers } from "next/headers";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { getAIModel, isAIConfigured } from "@/lib/ai";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { monitoringCapability } from "@/lib/schema";
@@ -100,10 +100,9 @@ export async function POST(req: Request) {
 
   const { prompt } = parsed.data;
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
+  if (!isAIConfigured()) {
     return Response.json(
-      { error: "OpenRouter API key not configured" },
+      { error: "AI provider not configured" },
       { status: 500 }
     );
   }
@@ -118,13 +117,11 @@ export async function POST(req: Request) {
     );
   }
 
-  const openrouter = createOpenRouter({ apiKey });
-
   // Call AI to parse user intent into structured alert config
   let result;
   try {
     result = await generateObject({
-      model: openrouter(process.env.OPENROUTER_MODEL || "openai/gpt-5-mini"),
+      model: getAIModel(),
       schema: aiAlertSchema,
       system: buildSystemPrompt(capabilities),
       prompt,

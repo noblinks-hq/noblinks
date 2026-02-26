@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { streamText, UIMessage, convertToModelMessages } from "ai";
 import { z } from "zod";
+import { getAIModel, isAIConfigured } from "@/lib/ai";
 import { auth } from "@/lib/auth";
 
 const messagePartSchema = z.object({
@@ -99,10 +99,9 @@ export async function POST(req: Request) {
 
   const { messages, alertContext } = parsed.data;
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
+  if (!isAIConfigured()) {
     return new Response(
-      JSON.stringify({ error: "OpenRouter API key not configured" }),
+      JSON.stringify({ error: "AI provider not configured" }),
       {
         status: 500,
         headers: { "Content-Type": "application/json" },
@@ -110,10 +109,8 @@ export async function POST(req: Request) {
     );
   }
 
-  const openrouter = createOpenRouter({ apiKey });
-
   const result = streamText({
-    model: openrouter(process.env.OPENROUTER_MODEL || "openai/gpt-5-mini"),
+    model: getAIModel(),
     system: buildSystemPrompt(alertContext),
     messages: convertToModelMessages(messages as UIMessage[]),
   });

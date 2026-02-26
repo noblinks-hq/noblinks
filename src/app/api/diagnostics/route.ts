@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getActiveAIProvider, isAIConfigured } from "@/lib/ai";
 
 type StatusLevel = "ok" | "warn" | "error";
 
@@ -9,6 +10,7 @@ interface DiagnosticsResponse {
     BETTER_AUTH_SECRET: boolean;
     GOOGLE_CLIENT_ID: boolean;
     GOOGLE_CLIENT_SECRET: boolean;
+    OPENAI_API_KEY: boolean;
     OPENROUTER_API_KEY: boolean;
     NEXT_PUBLIC_APP_URL: boolean;
   };
@@ -23,6 +25,7 @@ interface DiagnosticsResponse {
   };
   ai: {
     configured: boolean;
+    provider: "openai" | "openrouter" | null;
   };
   storage: {
     configured: boolean;
@@ -40,6 +43,7 @@ export async function GET(req: Request) {
     BETTER_AUTH_SECRET: Boolean(process.env.BETTER_AUTH_SECRET),
     GOOGLE_CLIENT_ID: Boolean(process.env.GOOGLE_CLIENT_ID),
     GOOGLE_CLIENT_SECRET: Boolean(process.env.GOOGLE_CLIENT_SECRET),
+    OPENAI_API_KEY: Boolean(process.env.OPENAI_API_KEY),
     OPENROUTER_API_KEY: Boolean(process.env.OPENROUTER_API_KEY),
     NEXT_PUBLIC_APP_URL: Boolean(process.env.NEXT_PUBLIC_APP_URL),
   } as const;
@@ -120,7 +124,8 @@ export async function GET(req: Request) {
 
   const authConfigured =
     env.BETTER_AUTH_SECRET && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET;
-  const aiConfigured = env.OPENROUTER_API_KEY; // We avoid live-calling the AI provider here
+  const aiConfigured = isAIConfigured();
+  const aiProvider = getActiveAIProvider();
 
   // Storage configuration check
   const storageConfigured = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
@@ -148,6 +153,7 @@ export async function GET(req: Request) {
     },
     ai: {
       configured: aiConfigured,
+      provider: aiProvider,
     },
     storage: {
       configured: storageConfigured,

@@ -17,7 +17,11 @@ const serverEnvSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
 
-  // AI
+  // AI - OpenAI direct (takes priority)
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().default("gpt-4o-mini"),
+
+  // AI - OpenRouter (fallback)
   OPENROUTER_API_KEY: z.string().optional(),
   OPENROUTER_MODEL: z.string().default("openai/gpt-5-mini"),
 
@@ -100,8 +104,8 @@ export function checkEnv(): void {
     warnings.push("Google OAuth is not configured. Social login will be disabled.");
   }
 
-  if (!process.env.OPENROUTER_API_KEY) {
-    warnings.push("OPENROUTER_API_KEY is not set. AI chat will not work.");
+  if (!process.env.OPENAI_API_KEY && !process.env.OPENROUTER_API_KEY) {
+    warnings.push("Neither OPENAI_API_KEY nor OPENROUTER_API_KEY is set. AI features will not work.");
   }
 
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
