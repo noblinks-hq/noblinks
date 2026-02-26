@@ -101,7 +101,7 @@ export default function AlertDetailPage({
       {/* Action buttons */}
       <div className="flex gap-3">
         <Button variant="outline" asChild>
-          <Link href="/chat">
+          <Link href={`/alerts/${id}/ai`}>
             <Bot className="mr-2 h-4 w-4" />
             Open Noblinks AI
           </Link>
