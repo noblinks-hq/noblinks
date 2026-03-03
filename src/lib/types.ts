@@ -31,6 +31,7 @@ export interface Machine {
   type: MachineType;
   status: MachineStatus;
   lastSeen: string;
+  ip?: string;
 }
 
 export interface Alert {
