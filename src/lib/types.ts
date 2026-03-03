@@ -95,3 +95,17 @@ export interface DbAlert {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface DbMachine {
+  id: string;
+  organizationId: string;
+  name: string;
+  hostname: string | null;
+  ip: string | null;
+  agentVersion: string | null;
+  category: MachineType | null;
+  status: string;
+  lastSeen: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

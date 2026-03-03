@@ -90,6 +90,7 @@ export const organization = pgTable("organization", {
   logo: text("logo"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   metadata: text("metadata"),
+  agentRegistrationToken: text("agent_registration_token").unique(),
 });
 
 export const member = pgTable(
@@ -217,5 +218,32 @@ export const alert = pgTable(
     index("alert_capability_id_idx").on(table.capabilityId),
     index("alert_created_by_idx").on(table.createdBy),
     index("alert_status_idx").on(table.status),
+  ]
+);
+
+export const machine = pgTable(
+  "machine",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    hostname: text("hostname"),
+    ip: text("ip"),
+    agentVersion: text("agent_version"),
+    category: text("category"), // null = discovered; "linux"|"windows"|"kubernetes" = assigned
+    status: text("status").default("online").notNull(),
+    lastSeen: timestamp("last_seen"),
+    agentTokenHash: text("agent_token_hash").unique(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("machine_org_id_idx").on(table.organizationId),
+    index("machine_agent_token_hash_idx").on(table.agentTokenHash),
   ]
 );
