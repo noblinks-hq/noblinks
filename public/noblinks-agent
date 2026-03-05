@@ -95,7 +95,8 @@ sync_rules() {
   alert_ids=$(printf '%s' "$new_rules" \
     | grep 'noblinks_alert_id:' \
     | sed 's/.*noblinks_alert_id:[[:space:]]*"\?\([^"[:space:]]*\)"\?.*/\1/' \
-    | sort -u)
+    | sort -u \
+    || true)
 
   if [[ -n "$alert_ids" ]]; then
     ids_json=$(printf '%s' "$alert_ids" \
