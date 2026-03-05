@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Activity, Gauge, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { Dashboard } from "@/lib/types";
+import type { Dashboard, DbWidget } from "@/lib/types";
 import type { SlideshowConfig } from "./slideshow-config-modal";
 
 const categoryColors: Record<string, string> = {
@@ -12,6 +12,13 @@ const categoryColors: Record<string, string> = {
   docker: "from-cyan-500/30 to-cyan-500/5",
   kubernetes: "from-purple-500/30 to-purple-500/5",
   custom: "from-amber-500/30 to-amber-500/5",
+};
+
+const categoryBorderColors: Record<string, string> = {
+  infrastructure: "border-blue-500/30",
+  docker: "border-cyan-500/30",
+  kubernetes: "border-purple-500/30",
+  custom: "border-amber-500/30",
 };
 
 export function SlideshowView({
@@ -25,6 +32,7 @@ export function SlideshowView({
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [fading, setFading] = useState(false);
+  const [widgetsByDashboard, setWidgetsByDashboard] = useState<Record<string, DbWidget[]>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
 
@@ -33,6 +41,20 @@ export function SlideshowView({
   );
 
   const current = selected[currentIndex];
+
+  // Fetch widgets for all selected dashboards
+  useEffect(() => {
+    Promise.all(
+      selected.map((d) =>
+        fetch(`/api/dashboards/${d.id}/widgets`)
+          .then((r) => (r.ok ? r.json() : { widgets: [] }))
+          .then((data: { widgets: DbWidget[] }) => [d.id, data.widgets] as const)
+      )
+    ).then((entries) => {
+      setWidgetsByDashboard(Object.fromEntries(entries));
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.dashboardIds.join(",")]);
 
   const advanceSlide = useCallback(() => {
     setFading(true);
@@ -103,11 +125,13 @@ export function SlideshowView({
   if (!current) return null;
 
   const gradient = categoryColors[current.category] ?? categoryColors.custom;
+  const borderColor = categoryBorderColors[current.category] ?? categoryBorderColors.custom;
+  const currentWidgets = widgetsByDashboard[current.id] ?? [];
 
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-background"
+      className="fixed inset-0 z-[100] flex flex-col bg-background"
     >
       {/* Exit button */}
       <Button
@@ -137,36 +161,76 @@ export function SlideshowView({
 
       {/* Dashboard slide */}
       <div
-        className={`flex h-full w-full flex-col items-center justify-center transition-opacity duration-400 ${
+        className={`flex h-full w-full flex-col transition-opacity duration-400 ${
           fading ? "opacity-0" : "opacity-100"
         }`}
       >
-        <div className="w-full max-w-4xl space-y-8 px-8">
-          {/* Header */}
-          <div className="space-y-2 text-center">
-            <Badge variant="outline" className="text-sm">
-              {current.category}
-            </Badge>
-            <h1 className="text-4xl font-bold">{current.name}</h1>
-            <p className="text-lg text-muted-foreground">
-              {current.environment}
-            </p>
-          </div>
-
-          {/* Placeholder visualization area */}
-          <div
-            className={`h-64 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center border`}
-          >
-            <p className="text-muted-foreground">
-              {current.visualizationCount} visualizations
-            </p>
-          </div>
-
-          {/* Counter */}
+        {/* Header bar */}
+        <div className={`h-1.5 w-full bg-gradient-to-r ${gradient}`} />
+        <div className="flex items-center gap-4 border-b px-10 py-5">
+          <h1 className="text-2xl font-bold">{current.name}</h1>
+          <Badge variant="secondary" className="text-sm">{current.environment}</Badge>
+          <Badge variant="outline" className="text-sm">{current.category}</Badge>
           {selected.length > 1 && (
-            <p className="text-center text-sm text-muted-foreground">
-              {currentIndex + 1} of {selected.length}
-            </p>
+            <span className="ml-auto text-sm text-muted-foreground">
+              {currentIndex + 1} / {selected.length}
+            </span>
+          )}
+        </div>
+
+        {/* Widgets grid */}
+        <div className="flex-1 overflow-auto px-10 py-8">
+          {currentWidgets.length === 0 ? (
+            <div className="flex h-full items-center justify-center">
+              <p className="text-lg text-muted-foreground">
+                No widgets in this dashboard yet.
+              </p>
+            </div>
+          ) : (
+            <div className="grid h-full auto-rows-fr grid-cols-2 gap-6 lg:grid-cols-3">
+              {currentWidgets.map((w) => (
+                <div
+                  key={w.id}
+                  className={`flex flex-col rounded-xl border-2 ${borderColor} bg-muted/20 p-6`}
+                >
+                  <div className="mb-4 flex items-start justify-between gap-2">
+                    <h2 className="text-lg font-semibold leading-tight">{w.title}</h2>
+                    <Badge variant="secondary" className="shrink-0 text-xs">
+                      {w.type === "timeseries" ? (
+                        <><Activity className="mr-1 h-3 w-3" />Time Series</>
+                      ) : (
+                        <><Gauge className="mr-1 h-3 w-3" />Stat</>
+                      )}
+                    </Badge>
+                  </div>
+                  <p className="mb-3 text-sm text-muted-foreground">
+                    Machine: <span className="font-medium text-foreground">{w.machine}</span>
+                  </p>
+                  {/* Simulated chart area */}
+                  <div className={`flex-1 rounded-lg bg-gradient-to-br ${gradient} flex items-end justify-around px-3 pb-3 pt-6 opacity-70`}>
+                    {w.type === "timeseries" ? (
+                      /* Fake bar chart */
+                      [40, 65, 55, 80, 60, 75, 50, 70, 85, 45, 72, 60].map((h, i) => (
+                        <div
+                          key={i}
+                          className="w-3 rounded-t bg-primary/60"
+                          style={{ height: `${h}%` }}
+                        />
+                      ))
+                    ) : (
+                      /* Fake stat */
+                      <div className="flex w-full flex-col items-center justify-center gap-1">
+                        <span className="text-4xl font-bold text-primary">72%</span>
+                        <span className="text-xs text-muted-foreground">current value</span>
+                      </div>
+                    )}
+                  </div>
+                  <code className="mt-3 truncate rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
+                    {w.metric}
+                  </code>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>

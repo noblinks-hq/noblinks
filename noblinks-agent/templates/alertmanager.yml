@@ -1,0 +1,18 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: 'noblinks'
+  group_by: ['noblinks_alert_id']
+  group_wait: 10s
+  group_interval: 30s
+  repeat_interval: 4h
+
+receivers:
+  - name: 'noblinks'
+    webhook_configs:
+      - url: 'NOBLINKS_URL_PLACEHOLDER/api/agent/webhook'
+        http_config:
+          authorization:
+            credentials: 'AGENT_TOKEN_PLACEHOLDER'
+        send_resolved: true

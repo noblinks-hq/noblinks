@@ -160,6 +160,34 @@ export const dashboard = pgTable(
   ]
 );
 
+export const widget = pgTable(
+  "widget",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    dashboardId: uuid("dashboard_id")
+      .notNull()
+      .references(() => dashboard.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    type: text("type").notNull(), // "timeseries" | "stat"
+    metric: text("metric").notNull(),
+    machine: text("machine").notNull(),
+    capabilityKey: text("capability_key"),
+    thresholdValue: integer("threshold_value"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("widget_dashboard_id_idx").on(table.dashboardId),
+    index("widget_org_id_idx").on(table.organizationId),
+  ]
+);
+
 export const monitoringCapability = pgTable(
   "monitoring_capability",
   {
@@ -221,6 +249,23 @@ export const alert = pgTable(
   ]
 );
 
+export const environment = pgTable(
+  "environment",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [index("environment_org_id_idx").on(table.organizationId)]
+);
+
 export const machine = pgTable(
   "machine",
   {
@@ -236,6 +281,7 @@ export const machine = pgTable(
     status: text("status").default("online").notNull(),
     lastSeen: timestamp("last_seen"),
     agentTokenHash: text("agent_token_hash").unique(),
+    environmentId: uuid("environment_id").references(() => environment.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

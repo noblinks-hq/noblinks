@@ -1,0 +1,21 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['localhost:9093']
+
+rule_files:
+  - /etc/prometheus/rules/noblinks.yml
+
+scrape_configs:
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']
+    relabel_configs:
+      # Force instance label to match the machine name in noblinks.
+      # This ensures PromQL queries like instance="MACHINE_NAME_PLACEHOLDER" resolve correctly.
+      - target_label: instance
+        replacement: 'MACHINE_NAME_PLACEHOLDER'

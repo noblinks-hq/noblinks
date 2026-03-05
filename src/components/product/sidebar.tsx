@@ -21,7 +21,6 @@ const navItems = [
   { href: "/dashboards", label: "Dashboards", icon: LayoutGrid },
   { href: "/machines", label: "Machines", icon: Server },
   { href: "/alerts", label: "Alerts", icon: AlertTriangle },
-  { href: "/machines", label: "AI Assistant", icon: Bot },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

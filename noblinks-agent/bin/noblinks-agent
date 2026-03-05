@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# noblinks-agent daemon
+# Runs as a systemd service. Sends heartbeats every 30s and syncs
+# Prometheus alert rules every 60s.
+set -euo pipefail
+
+CONFIG_FILE="${NOBLINKS_CONFIG:-/etc/noblinks/agent.env}"
+
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  echo "ERROR: config not found at $CONFIG_FILE" >&2
+  exit 1
+fi
+
+# shellcheck source=/dev/null
+source "$CONFIG_FILE"
+
+: "${NOBLINKS_URL:?NOBLINKS_URL not set in $CONFIG_FILE}"
+: "${AGENT_TOKEN:?AGENT_TOKEN not set in $CONFIG_FILE}"
+: "${MACHINE_NAME:?MACHINE_NAME not set in $CONFIG_FILE}"
+: "${AGENT_VERSION:?AGENT_VERSION not set in $CONFIG_FILE}"
+
+PROMETHEUS_URL="http://localhost:9090"
+RULES_FILE="/etc/prometheus/rules/noblinks.yml"
+HEARTBEAT_INTERVAL=30
+SYNC_INTERVAL=60
+LAST_SYNC=0
+LAST_RULES_HASH=""
+
+log() {
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] noblinks-agent: $*"
+}
+
+# Check if a local process is listening on a port
+is_running() {
+  local port="$1"
+  # Try ss first, fall back to netstat
+  if command -v ss &>/dev/null; then
+    ss -ltn 2>/dev/null | grep -q ":${port} " && return 0
+  elif command -v netstat &>/dev/null; then
+    netstat -ltn 2>/dev/null | grep -q ":${port} " && return 0
+  fi
+  return 1
+}
+
+send_heartbeat() {
+  local prometheus_running alertmanager_running node_exporter_running
+  is_running 9090 && prometheus_running=true    || prometheus_running=false
+  is_running 9093 && alertmanager_running=true  || alertmanager_running=false
+  is_running 9100 && node_exporter_running=true || node_exporter_running=false
+
+  local payload
+  payload=$(printf '{"agentVersion":"%s","prometheusRunning":%s,"alertmanagerRunning":%s,"nodeExporterRunning":%s}' \
+    "$AGENT_VERSION" "$prometheus_running" "$alertmanager_running" "$node_exporter_running")
+
+  if ! curl -sf \
+      --max-time 10 \
+      -X POST "${NOBLINKS_URL}/api/agent/heartbeat" \
+      -H "Authorization: Bearer ${AGENT_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d "$payload" \
+      > /dev/null; then
+    log "heartbeat failed (will retry)"
+  fi
+}
+
+sync_rules() {
+  local new_rules
+  new_rules=$(curl -sf \
+    --max-time 15 \
+    "${NOBLINKS_URL}/api/agent/rules" \
+    -H "Authorization: Bearer ${AGENT_TOKEN}" \
+    || true)
+
+  if [[ -z "$new_rules" ]]; then
+    log "failed to fetch rules, skipping"
+    return
+  fi
+
+  local new_hash
+  new_hash=$(printf '%s' "$new_rules" | sha256sum | awk '{print $1}')
+
+  if [[ "$new_hash" == "$LAST_RULES_HASH" ]]; then
+    return  # no change
+  fi
+
+  log "rules changed, updating Prometheus"
+  printf '%s\n' "$new_rules" > "$RULES_FILE"
+  LAST_RULES_HASH="$new_hash"
+
+  # Hot-reload Prometheus (--web.enable-lifecycle required — set in service file)
+  if ! curl -sf --max-time 5 -X POST "${PROMETHEUS_URL}/-/reload" > /dev/null; then
+    log "prometheus reload failed (rules written but not reloaded)"
+  fi
+
+  # Extract noblinks_alert_id values and report them as active
+  local alert_ids ids_json
+  alert_ids=$(printf '%s' "$new_rules" \
+    | grep 'noblinks_alert_id:' \
+    | sed 's/.*noblinks_alert_id:[[:space:]]*"\?\([^"[:space:]]*\)"\?.*/\1/' \
+    | sort -u)
+
+  if [[ -n "$alert_ids" ]]; then
+    ids_json=$(printf '%s' "$alert_ids" | awk '{printf "\"%s\",", $0}' | sed 's/,$//')
+    curl -sf \
+      --max-time 10 \
+      -X PATCH "${NOBLINKS_URL}/api/agent/status" \
+      -H "Authorization: Bearer ${AGENT_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d "{\"activatedAlertIds\":[${ids_json}]}" \
+      > /dev/null \
+      || log "status update failed"
+  fi
+}
+
+log "starting (machine=${MACHINE_NAME}, version=${AGENT_VERSION})"
+log "noblinks URL: ${NOBLINKS_URL}"
+
+# Initial heartbeat + sync immediately on start
+send_heartbeat
+sync_rules
+LAST_SYNC=$(date +%s)
+
+while true; do
+  sleep "$HEARTBEAT_INTERVAL"
+  send_heartbeat
+
+  NOW=$(date +%s)
+  if (( NOW - LAST_SYNC >= SYNC_INTERVAL )); then
+    sync_rules
+    LAST_SYNC=$NOW
+  fi
+done

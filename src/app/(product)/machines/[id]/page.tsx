@@ -1,40 +1,71 @@
 "use client";
 
-import { use } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, Activity, Server } from "lucide-react";
-import { AddMachineModal } from "@/components/product/add-machine-modal";
-import { AiChatPanel } from "@/components/product/ai-chat-panel";
-import { EmptyState } from "@/components/product/empty-state";
-import { TimeSeriesWidget } from "@/components/product/time-series-widget";
+import { ChevronRight, Server } from "lucide-react";
+import { AddMachineToEnvModal } from "@/components/product/add-machine-to-env-modal";
+import { ConnectMachineModal } from "@/components/product/connect-machine-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useNoblinks } from "@/context/noblinks-context";
-import type { MachineType } from "@/lib/types";
+import { Skeleton } from "@/components/ui/skeleton";
+import type { DbMachine, Environment } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
-const CATEGORIES: Record<MachineType, string> = {
-  linux: "Linux VM",
-  windows: "Windows VM",
+const TYPE_LABELS: Record<string, string> = {
+  linux: "Linux",
   kubernetes: "Kubernetes",
+  windows: "Windows",
 };
 
-const CATEGORY_GRADIENTS: Record<MachineType, string> = {
-  linux: "from-emerald-500/20 to-emerald-500/5",
-  windows: "from-blue-500/20 to-blue-500/5",
-  kubernetes: "from-purple-500/20 to-purple-500/5",
+const TYPE_COLORS: Record<string, string> = {
+  linux: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+  kubernetes: "bg-purple-500/10 text-purple-700 dark:text-purple-400",
+  windows: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
 };
 
-function isCategoryParam(id: string): id is MachineType {
-  return id === "linux" || id === "windows" || id === "kubernetes";
-}
+export default function EnvironmentPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id: envId } = use(params);
+  const [env, setEnv] = useState<Environment | null>(null);
+  const [machines, setMachines] = useState<DbMachine[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [addOpen, setAddOpen] = useState(false);
+  const [connectMachine, setConnectMachine] = useState<DbMachine | null>(null);
 
-// ── Category table view ──────────────────────────────────────────────────────
+  const fetchMachines = useCallback(async () => {
+    const res = await fetch(`/api/machines?environmentId=${envId}`);
+    if (res.ok) {
+      const data = (await res.json()) as { machines: DbMachine[] };
+      setMachines(data.machines);
+    }
+  }, [envId]);
 
-function CategoryPage({ type }: { type: MachineType }) {
-  const { machines } = useNoblinks();
-  const label = CATEGORIES[type];
-  const gradient = CATEGORY_GRADIENTS[type];
-  const catMachines = machines.filter((m) => m.type === type);
+  useEffect(() => {
+    async function load() {
+      try {
+        const [envsRes] = await Promise.all([
+          fetch("/api/environments"),
+          fetchMachines(),
+        ]);
+        if (envsRes.ok) {
+          const envs = (await envsRes.json()) as Environment[];
+          setEnv(envs.find((e) => e.id === envId) ?? null);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [envId, fetchMachines]);
+
+  function handleAdded(machine: DbMachine) {
+    setAddOpen(false);
+    setMachines((prev) => [...prev, machine]);
+    setConnectMachine(machine);
+  }
 
   return (
     <div className="space-y-6">
@@ -43,24 +74,38 @@ function CategoryPage({ type }: { type: MachineType }) {
           Machines
         </Link>
         <ChevronRight className="h-4 w-4" />
-        <span className="text-foreground">{label}</span>
+        <span className="text-foreground">
+          {loading ? "..." : (env?.name ?? "Environment")}
+        </span>
       </nav>
 
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">{label}</h1>
-          <Badge variant="secondary">{catMachines.length}</Badge>
-        </div>
-        <AddMachineModal />
+        <h1 className="text-2xl font-bold">
+          {loading ? (
+            <Skeleton className="h-8 w-40" />
+          ) : (
+            (env?.name ?? "Environment")
+          )}
+        </h1>
+        <Button onClick={() => setAddOpen(true)}>Add Machine</Button>
       </div>
 
-      {catMachines.length === 0 ? (
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-14 rounded-lg" />
+          ))}
+        </div>
+      ) : machines.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
           <Server className="h-10 w-10 text-muted-foreground" />
-          <h3 className="mt-4 text-lg font-semibold">No {label} machines</h3>
+          <h3 className="mt-4 text-lg font-semibold">No machines yet</h3>
           <p className="mt-1 text-sm text-muted-foreground">
             Add your first machine to get started.
           </p>
+          <Button className="mt-4" onClick={() => setAddOpen(true)}>
+            Add Machine
+          </Button>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border">
@@ -68,50 +113,72 @@ function CategoryPage({ type }: { type: MachineType }) {
             <thead>
               <tr className="border-b bg-muted/50">
                 <th className="px-4 py-3 text-left font-medium">Machine</th>
+                <th className="px-4 py-3 text-left font-medium">Type</th>
                 <th className="px-4 py-3 text-left font-medium">IP Address</th>
                 <th className="px-4 py-3 text-left font-medium">Status</th>
-                <th className="px-4 py-3 text-left font-medium">Last Seen</th>
                 <th className="px-4 py-3 text-left font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {catMachines.map((machine) => (
+              {machines.map((m) => (
                 <tr
-                  key={machine.id}
-                  className="border-b transition-colors hover:bg-muted/50"
+                  key={m.id}
+                  className="border-b last:border-0 transition-colors hover:bg-muted/50"
                 >
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`h-6 w-1 rounded-full bg-gradient-to-b ${gradient}`}
-                      />
-                      <span className="font-medium">{machine.name}</span>
+                    <div>
+                      <span className="font-medium">{m.name}</span>
+                      {m.hostname && m.hostname !== m.name && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          ({m.hostname})
+                        </span>
+                      )}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {machine.ip ?? "—"}
-                  </td>
                   <td className="px-4 py-3">
-                    <Badge
-                      variant={
-                        machine.status === "online" ? "default" : "secondary"
-                      }
-                      className={
-                        machine.status === "online"
-                          ? "bg-green-600 hover:bg-green-600"
-                          : ""
-                      }
-                    >
-                      {machine.status === "online" ? "Online" : "Offline"}
-                    </Badge>
+                    {m.category ? (
+                      <span
+                        className={cn(
+                          "rounded-md px-2 py-1 text-xs font-medium",
+                          TYPE_COLORS[m.category] ??
+                            "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        {TYPE_LABELS[m.category] ?? m.category}
+                      </span>
+                    ) : (
+                      "\u2014"
+                    )}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    {machine.lastSeen}
+                    {m.ip ?? "\u2014"}
                   </td>
                   <td className="px-4 py-3">
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href={`/machines/${machine.id}`}>View</Link>
-                    </Button>
+                    {m.status === "online" ? (
+                      <Badge className="bg-green-600 hover:bg-green-600">
+                        Online
+                      </Badge>
+                    ) : m.status === "pending" ? (
+                      <Badge
+                        variant="outline"
+                        className="border-amber-500 text-amber-600"
+                      >
+                        Pending
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">Offline</Badge>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {m.status !== "online" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setConnectMachine(m)}
+                      >
+                        Connect
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -119,93 +186,27 @@ function CategoryPage({ type }: { type: MachineType }) {
           </table>
         </div>
       )}
+
+      <AddMachineToEnvModal
+        environmentId={envId}
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        onAdded={handleAdded}
+      />
+
+      {connectMachine && (
+        <ConnectMachineModal
+          machine={connectMachine}
+          open={!!connectMachine}
+          onOpenChange={(v) => {
+            if (!v) setConnectMachine(null);
+          }}
+          onConnected={() => {
+            setConnectMachine(null);
+            fetchMachines();
+          }}
+        />
+      )}
     </div>
   );
-}
-
-// ── Machine detail view ──────────────────────────────────────────────────────
-
-function MachineDetailPage({ id }: { id: string }) {
-  const { machines, widgets } = useNoblinks();
-  const machine = machines.find((m) => m.id === id);
-
-  if (!machine) {
-    return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold">Machine not found</h1>
-        <p className="text-muted-foreground">
-          This machine doesn&apos;t exist or has been removed.
-        </p>
-      </div>
-    );
-  }
-
-  const machineWidgets = widgets.filter((w) => w.machineId === machine.id);
-
-  return (
-    <div className="space-y-6">
-      <nav className="flex items-center gap-1 text-sm text-muted-foreground">
-        <Link href="/machines" className="hover:text-foreground">
-          Machines
-        </Link>
-        <ChevronRight className="h-4 w-4" />
-        <Link
-          href={`/machines/${machine.type}`}
-          className="hover:text-foreground"
-        >
-          {CATEGORIES[machine.type]}
-        </Link>
-        <ChevronRight className="h-4 w-4" />
-        <span className="text-foreground">{machine.name}</span>
-      </nav>
-
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-bold">{machine.name}</h1>
-        <Badge
-          variant="default"
-          className={
-            machine.status === "online" ? "bg-green-600 hover:bg-green-600" : ""
-          }
-        >
-          {machine.status === "online" ? "Online" : "Offline"}
-        </Badge>
-        <Badge variant="outline">{CATEGORIES[machine.type]}</Badge>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          {machineWidgets.length === 0 ? (
-            <EmptyState
-              icon={Activity}
-              title="No monitors yet"
-              description="This machine is not being monitored yet. Tell Noblinks what you care about."
-            />
-          ) : (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {machineWidgets.map((widget) => (
-                <TimeSeriesWidget key={widget.id} widget={widget} />
-              ))}
-            </div>
-          )}
-        </div>
-        <AiChatPanel machineId={machine.id} machineName={machine.name} />
-      </div>
-    </div>
-  );
-}
-
-// ── Route entry point ────────────────────────────────────────────────────────
-
-export default function MachinesRoute({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = use(params);
-
-  if (isCategoryParam(id)) {
-    return <CategoryPage type={id} />;
-  }
-
-  return <MachineDetailPage id={id} />;
 }

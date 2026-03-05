@@ -33,7 +33,15 @@
       "Bash(git -C /home/rashid/noblinks add -A)",
       "Bash(git -C:*)",
       "Bash(pnpm run db:push:*)",
-      "Bash(pnpm run db:seed:*)"
+      "Bash(pnpm run db:seed:*)",
+      "Bash(npm run:*)",
+      "Bash(psql $POSTGRES_URL:*)",
+      "Bash(git commit:*)",
+      "Bash(PGPASSWORD=npg_o06dADsRLQPZ psql:*)",
+      "Bash(grep:*)",
+      "Bash(npx drizzle-kit:*)",
+      "Bash(psql:*)",
+      "Bash(npx next:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

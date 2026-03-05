@@ -59,6 +59,24 @@ export interface Widget {
   thresholdValue?: number;
 }
 
+// --- Widget types ---
+
+export type WidgetType = "timeseries" | "stat";
+
+export interface DbWidget {
+  id: string;
+  dashboardId: string;
+  organizationId: string;
+  title: string;
+  type: WidgetType;
+  metric: string;
+  machine: string;
+  capabilityKey: string | null;
+  thresholdValue: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // --- AI Capability Registry types ---
 
 export type CapabilityCategory = "linux" | "kubernetes" | "docker" | "windows";
@@ -97,6 +115,14 @@ export interface DbAlert {
   updatedAt: string;
 }
 
+export interface Environment {
+  id: string;
+  organizationId: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DbMachine {
   id: string;
   organizationId: string;
@@ -105,6 +131,7 @@ export interface DbMachine {
   ip: string | null;
   agentVersion: string | null;
   category: MachineType | null;
+  environmentId: string | null;
   status: string;
   lastSeen: string | null;
   createdAt: string;

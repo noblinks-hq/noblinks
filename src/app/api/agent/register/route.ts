@@ -83,7 +83,13 @@ export async function POST(request: Request) {
   }
 
   return Response.json(
-    { machineId: machineRecord!.id, agentToken: rawToken },
+    {
+      machineId: machineRecord!.id,
+      machineName: machineRecord!.name,
+      organizationId: org.id,
+      agentToken: rawToken,
+      noblinksUrl: process.env.NEXT_PUBLIC_APP_URL ?? "https://app.noblinks.io",
+    },
     { status: 201 }
   );
 }

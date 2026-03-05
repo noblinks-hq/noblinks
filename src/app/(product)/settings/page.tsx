@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Server, X } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, RefreshCw, Server, X } from "lucide-react";
+import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -121,6 +122,9 @@ export default function SettingsPage() {
           </Button>
         </div>
       </div>
+
+      {/* Agent Integration */}
+      <AgentIntegrationSection />
 
       {/* Danger Zone */}
       <DeleteOrganizationSection />
@@ -296,6 +300,143 @@ function PendingInvitations() {
             </Button>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function AgentIntegrationSection() {
+  const currentRole = useCurrentMemberRole();
+  const canView = currentRole === "owner" || currentRole === "admin";
+
+  const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [rotating, setRotating] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [confirmRotate, setConfirmRotate] = useState(false);
+
+  useEffect(() => {
+    if (!canView) return;
+    setLoading(true);
+    fetch("/api/org/agent-token")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { token: string } | null) => {
+        if (data) setToken(data.token);
+      })
+      .finally(() => setLoading(false));
+  }, [canView]);
+
+  async function handleRotate() {
+    if (!confirmRotate) { setConfirmRotate(true); return; }
+    setRotating(true);
+    setConfirmRotate(false);
+    try {
+      const r = await fetch("/api/org/agent-token", { method: "POST" });
+      const data = (await r.json()) as { token: string };
+      setToken(data.token);
+      setVisible(true);
+      toast.success("Registration token rotated");
+    } catch {
+      toast.error("Failed to rotate token");
+    } finally {
+      setRotating(false);
+    }
+  }
+
+  async function handleCopy(text: string) {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  if (!canView) return null;
+
+  const masked = token ? `nbl_reg_${"•".repeat(20)}` : "Loading...";
+  const installCmd = token
+    ? `curl -fsSL https://app.noblinks.io/install.sh | sudo bash -s -- --token ${token} --name <machine-name>`
+    : "";
+
+  return (
+    <div className="rounded-lg border p-6 space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold">Agent Integration</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Use this token to connect Linux machines to your organization.
+        </p>
+      </div>
+
+      {/* Token row */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Org Registration Token</label>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 rounded-md bg-muted px-3 py-2 text-xs font-mono truncate">
+            {loading ? "Loading..." : visible ? token : masked}
+          </code>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setVisible((v) => !v)}
+            disabled={loading}
+          >
+            {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => token && handleCopy(token)}
+            disabled={loading || !token}
+          >
+            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          </Button>
+          <Button
+            variant={confirmRotate ? "destructive" : "outline"}
+            size="sm"
+            onClick={handleRotate}
+            disabled={rotating}
+          >
+            <RefreshCw className={`h-4 w-4 ${rotating ? "animate-spin" : ""}`} />
+            <span className="ml-1 hidden sm:inline">
+              {confirmRotate ? "Confirm" : "Rotate"}
+            </span>
+          </Button>
+        </div>
+        {confirmRotate && (
+          <p className="text-xs text-muted-foreground">
+            Click Rotate again to confirm. Existing machines keep their agent tokens — only new registrations are affected.{" "}
+            <button className="underline" onClick={() => setConfirmRotate(false)}>Cancel</button>
+          </p>
+        )}
+      </div>
+
+      {/* Install command */}
+      {token && (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Quick Install</label>
+          <div className="relative">
+            <pre className="rounded-md bg-muted px-4 py-3 pr-12 text-xs leading-relaxed whitespace-pre-wrap break-all">
+              {installCmd}
+            </pre>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute right-2 top-2"
+              onClick={() => handleCopy(installCmd)}
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Replace <code className="bg-muted px-1 rounded">&lt;machine-name&gt;</code> with a unique name for the machine (e.g.{" "}
+            <code className="bg-muted px-1 rounded">prod-api-1</code>). Run with <code className="bg-muted px-1 rounded">sudo</code> on the target Linux machine.
+          </p>
+        </div>
+      )}
+
+      <div className="pt-1">
+        <Button asChild variant="outline" size="sm">
+          <Link href="/machines">View Connected Machines</Link>
+        </Button>
       </div>
     </div>
   );
