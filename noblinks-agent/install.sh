@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # noblinks agent installer
-# Usage: curl -fsSL https://app.noblinks.io/install.sh | sudo bash -s -- --token <TOKEN> --name <MACHINE_NAME>
+# Usage: curl -fsSL https://www.noblinks.com/install.sh | sudo bash -s -- --token <TOKEN> --name <MACHINE_NAME>
 set -euo pipefail
 
 # ── Pinned versions ────────────────────────────────────────────────────────────
@@ -8,7 +8,7 @@ NODE_EXPORTER_VERSION="1.8.2"
 PROMETHEUS_VERSION="2.53.1"
 ALERTMANAGER_VERSION="0.27.0"
 AGENT_VERSION="0.1.0"
-NOBLINKS_URL="${NOBLINKS_URL:-https://app.noblinks.io}"
+NOBLINKS_URL="${NOBLINKS_URL:-https://www.noblinks.com}"
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'

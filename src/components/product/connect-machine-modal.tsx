@@ -101,7 +101,7 @@ export function ConnectMachineModal({
   }
 
   const installCommand = orgToken
-    ? `curl -fsSL https://app.noblinks.io/install.sh | sudo bash -s -- --token ${orgToken} --name "${machine.name}"`
+    ? `curl -fsSL ${process.env.NEXT_PUBLIC_APP_URL ?? "https://www.noblinks.com"}/install.sh | sudo bash -s -- --token ${orgToken} --name "${machine.name}"`
     : "Loading...";
 
   async function handleCopy() {

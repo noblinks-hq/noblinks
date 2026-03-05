@@ -41,7 +41,9 @@
       "Bash(grep:*)",
       "Bash(npx drizzle-kit:*)",
       "Bash(psql:*)",
-      "Bash(npx next:*)"
+      "Bash(npx next:*)",
+      "Bash(DATABASE_URL=\"postgresql://neondb_owner:npg_o06dADsRLQPZ@ep-steep-sea-agc8ylj1.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require\" npx drizzle-kit:*)",
+      "Bash(POSTGRES_URL=\"postgresql://neondb_owner:npg_o06dADsRLQPZ@ep-steep-sea-agc8ylj1.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require\" npm run:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

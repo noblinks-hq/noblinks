@@ -91,7 +91,7 @@ export function AddMachineModal() {
   }
 
   const installCommand = orgToken
-    ? `curl -fsSL https://app.noblinks.io/install.sh | sudo bash -s -- --token ${orgToken}`
+    ? `curl -fsSL ${process.env.NEXT_PUBLIC_APP_URL ?? "https://www.noblinks.com"}/install.sh | sudo bash -s -- --token ${orgToken}`
     : "";
 
   function copyCommand() {

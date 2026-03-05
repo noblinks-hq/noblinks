@@ -88,7 +88,7 @@ export async function POST(request: Request) {
       machineName: machineRecord!.name,
       organizationId: org.id,
       agentToken: rawToken,
-      noblinksUrl: process.env.NEXT_PUBLIC_APP_URL ?? "https://app.noblinks.io",
+      noblinksUrl: process.env.NEXT_PUBLIC_APP_URL ?? "https://www.noblinks.com",
     },
     { status: 201 }
   );
