@@ -37,9 +37,13 @@ sync_metrics_config() {
     --max-time 10 \
     "${NOBLINKS_URL}/api/agent/metrics-config" \
     -H "Authorization: Bearer ${AGENT_TOKEN}" \
+    2>/dev/null \
     || true)
 
-  [[ -z "$raw" ]] && return
+  if [[ -z "$raw" ]]; then
+    log "metrics-config: failed to reach server (will retry in ${METRICS_SYNC_INTERVAL}s)"
+    return
+  fi
 
   # Parse JSON with Python3 into a bash array of "key<TAB>promql" entries
   local parsed
@@ -48,9 +52,11 @@ import sys, json
 try:
     data = json.loads(sys.argv[1])
     for m in data.get("metrics", []):
-        print(m["key"] + "\t" + m["promql"])
-except Exception:
-    pass
+        if m.get("key") and m.get("promql"):
+            print(m["key"] + "\t" + m["promql"])
+except Exception as e:
+    import sys as _sys
+    print("parse error: " + str(e), file=_sys.stderr)
 PYEOF
   ) || true
 
@@ -60,6 +66,9 @@ PYEOF
   done <<< "$parsed"
 
   log "metrics-config: ${#METRICS_CONFIG[@]} metric(s) to collect"
+  for entry in "${METRICS_CONFIG[@]}"; do
+    log "  → $(echo "$entry" | cut -f1)"
+  done
 }
 
 log() {
@@ -100,16 +109,29 @@ for entry in entries:
         if results:
             val = float(results[0]["value"][1])
             samples.append({"metric": key, "value": val})
-    except Exception:
-        pass
+        else:
+            print(f"WARN: no results for {key}", file=sys.stderr)
+    except Exception as e:
+        print(f"WARN: query failed for {key}: {e}", file=sys.stderr)
 
 print(json.dumps(samples))
 PYEOF
-  ) || return 0
+  )
+  local py_exit=$?
+  if [[ $py_exit -ne 0 || -z "$samples_json" ]]; then
+    log "metrics: prometheus scrape failed (exit ${py_exit})"
+    return 0
+  fi
 
-  # Skip push if no samples were scraped
-  python3 -c "import sys, json; d=json.loads(sys.argv[1]); sys.exit(0 if d else 1)" "$samples_json" 2>/dev/null || return 0
+  local sample_count
+  sample_count=$(python3 -c "import json,sys; print(len(json.loads(sys.argv[1])))" "$samples_json" 2>/dev/null) || sample_count=0
 
+  if [[ "$sample_count" -eq 0 ]]; then
+    log "metrics: 0 samples scraped (prometheus may not have data yet)"
+    return 0
+  fi
+
+  log "metrics: pushing ${sample_count} sample(s)"
   if ! curl -sf \
       --max-time 10 \
       -X POST "${NOBLINKS_URL}/api/agent/metrics" \
@@ -117,7 +139,9 @@ PYEOF
       -H "Content-Type: application/json" \
       -d "{\"samples\":${samples_json}}" \
       > /dev/null; then
-    log "metrics push failed"
+    log "metrics: push to server failed"
+  else
+    log "metrics: pushed ${sample_count} sample(s) ok"
   fi
 }
 

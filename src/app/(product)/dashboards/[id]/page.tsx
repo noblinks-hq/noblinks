@@ -246,13 +246,20 @@ function TimeseriesChart({ id, points }: { id: string; points: DataPoint[] }) {
           </defs>
           <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
           <XAxis dataKey="t" hide />
-          <YAxis domain={[0, 100]} tickCount={3} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+          <YAxis
+            domain={hasData
+              ? [0, (dataMax: number) => Math.min(100, Math.max(dataMax * 1.5, 5))]
+              : [0, 100]}
+            tickCount={3}
+            tickFormatter={(v: number) => `${v.toFixed(0)}%`}
+            tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+          />
           <Tooltip
             contentStyle={TOOLTIP_STYLE}
             labelFormatter={(label) =>
               hasData && typeof label === "string" ? new Date(label).toLocaleTimeString() : ""
             }
-            formatter={(v) => [`${typeof v === "number" ? v.toFixed(1) : ""}%`, ""]}
+            formatter={(v) => [`${typeof v === "number" ? v.toFixed(1) : ""}%`, "value"]}
           />
           <Area type="monotone" dataKey="v" stroke="hsl(var(--primary))" strokeWidth={1.5} fill={`url(#grad-${id})`} connectNulls={false} dot={false} strokeOpacity={hasData ? 1 : 0.2} />
         </AreaChart>
@@ -398,7 +405,6 @@ function WidgetCard({
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <h3 className="font-medium leading-tight truncate">{w.title}</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">{w.machine}</p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <Badge variant="secondary" className="text-xs">
