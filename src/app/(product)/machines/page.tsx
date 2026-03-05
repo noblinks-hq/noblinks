@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Layers, Monitor } from "lucide-react";
 import { CreateEnvironmentModal } from "@/components/product/create-environment-modal";
+import { RemoveMachineModal } from "@/components/product/remove-machine-modal";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { DbMachine, Environment } from "@/lib/types";
 
@@ -24,6 +26,7 @@ export default function MachinesPage() {
   const [environments, setEnvironments] = useState<EnvironmentWithStats[]>([]);
   const [unassigned, setUnassigned] = useState<DbMachine[]>([]);
   const [loading, setLoading] = useState(true);
+  const [removeMachine, setRemoveMachine] = useState<DbMachine | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -99,23 +102,30 @@ export default function MachinesPage() {
               </div>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
                 {unassigned.map((m) => (
-                  <Link
+                  <div
                     key={m.id}
-                    href={`/machines/${m.id}`}
-                    className="flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors hover:bg-muted/50"
+                    className="flex items-center gap-3 rounded-lg border px-4 py-3"
                   >
                     <Monitor className="h-5 w-5 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1">
+                    <Link href={`/machines/${m.id}`} className="min-w-0 flex-1 hover:underline">
                       <p className="truncate font-medium">{m.name}</p>
                       <p className="truncate text-xs text-muted-foreground">
                         {m.hostname ?? m.ip ?? "No hostname"}
                       </p>
-                    </div>
+                    </Link>
                     <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
                       <span className={`h-1.5 w-1.5 rounded-full ${statusColor(m.status)}`} />
                       {m.status}
                     </span>
-                  </Link>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive shrink-0"
+                      onClick={() => setRemoveMachine(m)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -165,6 +175,15 @@ export default function MachinesPage() {
             </div>
           )}
         </div>
+      )}
+
+      {removeMachine && (
+        <RemoveMachineModal
+          machine={removeMachine}
+          open={!!removeMachine}
+          onOpenChange={(v) => { if (!v) setRemoveMachine(null); }}
+          onRemoved={() => { setRemoveMachine(null); fetchData(); }}
+        />
       )}
     </div>
   );

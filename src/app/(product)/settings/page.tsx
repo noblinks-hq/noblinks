@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Copy, Eye, EyeOff, RefreshCw, Server, X } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +20,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useNoblinks } from "@/context/noblinks-context";
 import { useSession, useActiveOrganization, organization } from "@/lib/auth-client";
 
 function useCurrentMemberRole() {
@@ -33,7 +32,6 @@ function useCurrentMemberRole() {
 }
 
 export default function SettingsPage() {
-  const { machines } = useNoblinks();
   const { data: session, isPending } = useSession();
   const { data: activeOrg, isPending: orgPending } = useActiveOrganization();
 
@@ -101,25 +99,6 @@ export default function SettingsPage() {
             <Label>Alert Channels</Label>
             <p className="text-sm text-muted-foreground">Email only</p>
           </div>
-        </div>
-      </div>
-
-      {/* Connected Machines */}
-      <div className="rounded-lg border p-6 space-y-4">
-        <h2 className="text-lg font-semibold">Connected Machines</h2>
-        <div className="flex items-center gap-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Server className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <p className="text-2xl font-bold">{machines.length}</p>
-            <p className="text-sm text-muted-foreground">
-              {machines.length === 1 ? "machine" : "machines"} connected
-            </p>
-          </div>
-          <Button asChild variant="outline" size="sm" className="ml-auto">
-            <Link href="/machines">Manage Machines</Link>
-          </Button>
         </div>
       </div>
 

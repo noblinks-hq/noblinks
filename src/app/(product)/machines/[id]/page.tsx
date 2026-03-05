@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronRight, Server } from "lucide-react";
 import { AddMachineToEnvModal } from "@/components/product/add-machine-to-env-modal";
 import { ConnectMachineModal } from "@/components/product/connect-machine-modal";
+import { RemoveMachineModal } from "@/components/product/remove-machine-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,6 +35,7 @@ export default function EnvironmentPage({
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [connectMachine, setConnectMachine] = useState<DbMachine | null>(null);
+  const [removeMachine, setRemoveMachine] = useState<DbMachine | null>(null);
 
   const fetchMachines = useCallback(async () => {
     const res = await fetch(`/api/machines?environmentId=${envId}`);
@@ -170,15 +172,25 @@ export default function EnvironmentPage({
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    {m.status !== "online" && (
+                    <div className="flex items-center gap-2">
+                      {m.status !== "online" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setConnectMachine(m)}
+                        >
+                          Connect
+                        </Button>
+                      )}
                       <Button
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
-                        onClick={() => setConnectMachine(m)}
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setRemoveMachine(m)}
                       >
-                        Connect
+                        Remove
                       </Button>
-                    )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -198,13 +210,17 @@ export default function EnvironmentPage({
         <ConnectMachineModal
           machine={connectMachine}
           open={!!connectMachine}
-          onOpenChange={(v) => {
-            if (!v) setConnectMachine(null);
-          }}
-          onConnected={() => {
-            setConnectMachine(null);
-            fetchMachines();
-          }}
+          onOpenChange={(v) => { if (!v) setConnectMachine(null); }}
+          onConnected={() => { setConnectMachine(null); fetchMachines(); }}
+        />
+      )}
+
+      {removeMachine && (
+        <RemoveMachineModal
+          machine={removeMachine}
+          open={!!removeMachine}
+          onOpenChange={(v) => { if (!v) setRemoveMachine(null); }}
+          onRemoved={() => { setRemoveMachine(null); fetchMachines(); }}
         />
       )}
     </div>
