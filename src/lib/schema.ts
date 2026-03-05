@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, integer, uuid, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, integer, uuid, jsonb, index, real } from "drizzle-orm/pg-core";
 
 // IMPORTANT! ID fields should ALWAYS use UUID types, EXCEPT the BetterAuth tables.
 
@@ -202,6 +202,7 @@ export const monitoringCapability = pgTable(
     defaultThreshold: integer("default_threshold").default(80).notNull(),
     defaultWindow: text("default_window").default("5m").notNull(),
     suggestedSeverity: text("suggested_severity").default("warning").notNull(), // critical | warning | info
+    scrapeQuery: text("scrape_query").notNull().default(""), // raw PromQL to evaluate for the current metric value
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -264,6 +265,28 @@ export const environment = pgTable(
       .notNull(),
   },
   (table) => [index("environment_org_id_idx").on(table.organizationId)]
+);
+
+export const metricSample = pgTable(
+  "metric_sample",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    machineName: text("machine_name").notNull(),
+    metricKey: text("metric_key").notNull(),
+    value: real("value").notNull(),
+    sampledAt: timestamp("sampled_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("metric_sample_lookup_idx").on(
+      table.organizationId,
+      table.machineName,
+      table.metricKey,
+      table.sampledAt
+    ),
+  ]
 );
 
 export const machine = pgTable(

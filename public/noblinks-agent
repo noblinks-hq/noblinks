@@ -26,6 +26,42 @@ SYNC_INTERVAL=60
 LAST_SYNC=0
 LAST_RULES_HASH=""
 
+METRICS_SYNC_INTERVAL=60
+LAST_METRICS_SYNC=0
+# Populated by sync_metrics_config; each element is "key\tpromql"
+METRICS_CONFIG=()
+
+sync_metrics_config() {
+  local raw
+  raw=$(curl -sf \
+    --max-time 10 \
+    "${NOBLINKS_URL}/api/agent/metrics-config" \
+    -H "Authorization: Bearer ${AGENT_TOKEN}" \
+    || true)
+
+  [[ -z "$raw" ]] && return
+
+  # Parse JSON with Python3 into a bash array of "key<TAB>promql" entries
+  local parsed
+  parsed=$(python3 - "$raw" <<'PYEOF'
+import sys, json
+try:
+    data = json.loads(sys.argv[1])
+    for m in data.get("metrics", []):
+        print(m["key"] + "\t" + m["promql"])
+except Exception:
+    pass
+PYEOF
+  ) || true
+
+  METRICS_CONFIG=()
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && METRICS_CONFIG+=("$line")
+  done <<< "$parsed"
+
+  log "metrics-config: ${#METRICS_CONFIG[@]} metric(s) to collect"
+}
+
 log() {
   echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] noblinks-agent: $*"
 }
@@ -38,6 +74,51 @@ is_running() {
     netstat -ltn 2>/dev/null | grep -q ":${port} " && return 0
   fi
   return 1
+}
+
+push_metrics() {
+  [[ ${#METRICS_CONFIG[@]} -eq 0 ]] && return 0  # no widgets configured yet
+
+  # Build JSON samples array by querying each required metric from Prometheus
+  local samples_json
+  samples_json=$(python3 - "${PROMETHEUS_URL}" "${METRICS_CONFIG[@]}" <<'PYEOF'
+import sys, json, urllib.request, urllib.parse
+
+prometheus_url = sys.argv[1]
+entries = sys.argv[2:]  # "key\tpromql" strings
+
+samples = []
+for entry in entries:
+    if "\t" not in entry:
+        continue
+    key, promql = entry.split("\t", 1)
+    try:
+        url = prometheus_url + "/api/v1/query?query=" + urllib.parse.quote(promql)
+        with urllib.request.urlopen(url, timeout=5) as r:
+            d = json.load(r)
+        results = d.get("data", {}).get("result", [])
+        if results:
+            val = float(results[0]["value"][1])
+            samples.append({"metric": key, "value": val})
+    except Exception:
+        pass
+
+print(json.dumps(samples))
+PYEOF
+  ) || return 0
+
+  # Skip push if no samples were scraped
+  python3 -c "import sys, json; d=json.loads(sys.argv[1]); sys.exit(0 if d else 1)" "$samples_json" 2>/dev/null || return 0
+
+  if ! curl -sf \
+      --max-time 10 \
+      -X POST "${NOBLINKS_URL}/api/agent/metrics" \
+      -H "Authorization: Bearer ${AGENT_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d "{\"samples\":${samples_json}}" \
+      > /dev/null; then
+    log "metrics push failed"
+  fi
 }
 
 send_heartbeat() {
@@ -118,14 +199,22 @@ log "noblinks URL: ${NOBLINKS_URL}"
 
 # Run immediately on start
 send_heartbeat
+sync_metrics_config
+push_metrics || true
 sync_rules
 LAST_SYNC=$(date +%s)
+LAST_METRICS_SYNC=$(date +%s)
 
 while true; do
   sleep "$HEARTBEAT_INTERVAL"
   send_heartbeat
+  push_metrics || true
 
   NOW=$(date +%s)
+  if (( NOW - LAST_METRICS_SYNC >= METRICS_SYNC_INTERVAL )); then
+    sync_metrics_config
+    LAST_METRICS_SYNC=$NOW
+  fi
   if (( NOW - LAST_SYNC >= SYNC_INTERVAL )); then
     sync_rules
     LAST_SYNC=$NOW

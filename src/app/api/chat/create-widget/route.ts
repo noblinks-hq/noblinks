@@ -26,10 +26,10 @@ const aiWidgetSchema = z.object({
       "Human-readable widget title like 'CPU Usage — web-server-1', or null if not matched"
     ),
   widgetType: z
-    .enum(["timeseries", "stat"])
+    .enum(["timeseries", "stat", "bar", "pie", "toplist"])
     .nullable()
     .describe(
-      "Widget visualization type: 'timeseries' for trend metrics, 'stat' for single-value metrics"
+      "Widget visualization type based on the metric nature"
     ),
   machine: z
     .string()
@@ -81,8 +81,11 @@ RULES:
 2. Extract the target machine name from the user's message.
 3. Generate a clear, descriptive widgetTitle in the format "Metric Name — machine-name".
 4. Determine the widgetType based on the metric nature:
-   - Use "stat" for single-value / point-in-time metrics: disk space, uptime, connection count, process count.
-   - Use "timeseries" for trend / rate metrics: CPU usage, memory usage, network throughput, load average.
+   - "timeseries": trend / rate metrics over time — CPU usage, memory usage, network throughput, load average.
+   - "stat": single current value — uptime, connection count, process count, file descriptor count.
+   - "bar": compare discrete values across categories or time buckets — disk usage by mount point, requests by status code.
+   - "pie": part-of-whole distributions — filesystem used vs free, memory breakdown by type.
+   - "toplist": ranked list of top N values — top processes by CPU, top endpoints by latency.
 5. Use the capability's metric field as the base metric expression, substituting the machine name where appropriate.
 6. If the user's request doesn't match ANY capability, set matched to false and explain why in noMatchReason.
 7. The machine parameter is the target server/instance name mentioned by the user.`;

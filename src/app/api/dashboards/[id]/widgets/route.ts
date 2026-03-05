@@ -77,7 +77,7 @@ export async function POST(
     thresholdValue?: number;
   };
 
-  const VALID_TYPES = ["timeseries", "stat"];
+  const VALID_TYPES = ["timeseries", "stat", "bar", "pie", "toplist"];
 
   if (!body.title?.trim()) {
     return Response.json({ error: "Title is required" }, { status: 400 });

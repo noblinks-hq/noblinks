@@ -1,0 +1,1 @@
+ALTER TABLE "monitoring_capability" ADD COLUMN "scrape_query" text DEFAULT '' NOT NULL;

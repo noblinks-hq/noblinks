@@ -61,7 +61,7 @@ export interface Widget {
 
 // --- Widget types ---
 
-export type WidgetType = "timeseries" | "stat";
+export type WidgetType = "timeseries" | "stat" | "bar" | "pie" | "toplist";
 
 export interface DbWidget {
   id: string;

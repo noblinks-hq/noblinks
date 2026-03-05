@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Activity,
   AlertTriangle,
+  AlignLeft,
+  BarChart2,
   Check,
   Gauge,
+  PieChart,
   Sparkles,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import type { WidgetType } from "@/lib/types";
+import type { DbMachine, WidgetType } from "@/lib/types";
 
 interface AddWidgetModalProps {
   dashboardId: string;
@@ -50,7 +53,15 @@ interface AiWidgetResult {
 type Step = "input" | "analyzing" | "review" | "creating" | "success" | "error";
 type ErrorKind = "api" | "no_match";
 
-const WIDGET_TYPE_OPTIONS: WidgetType[] = ["timeseries", "stat"];
+const WIDGET_TYPE_OPTIONS: WidgetType[] = ["timeseries", "stat", "bar", "pie", "toplist"];
+
+const WIDGET_TYPE_META: Record<WidgetType, { label: string; icon: React.ReactNode }> = {
+  timeseries: { label: "Time Series", icon: <Activity className="h-3.5 w-3.5" /> },
+  stat:       { label: "Stat",        icon: <Gauge className="h-3.5 w-3.5" /> },
+  bar:        { label: "Bar Chart",   icon: <BarChart2 className="h-3.5 w-3.5" /> },
+  pie:        { label: "Pie Chart",   icon: <PieChart className="h-3.5 w-3.5" /> },
+  toplist:    { label: "Top List",    icon: <AlignLeft className="h-3.5 w-3.5" /> },
+};
 
 export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) {
   const [open, setOpen] = useState(false);
@@ -59,12 +70,23 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
   const [aiResult, setAiResult] = useState<AiWidgetResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [errorKind, setErrorKind] = useState<ErrorKind>("api");
+  const [machines, setMachines] = useState<DbMachine[]>([]);
+  const [selectedMachine, setSelectedMachine] = useState("");
 
   // Editable fields (initialized from AI result)
   const [editTitle, setEditTitle] = useState("");
   const [editMachine, setEditMachine] = useState("");
   const [editType, setEditType] = useState<WidgetType>("timeseries");
   const [editing, setEditing] = useState(false);
+
+  // Fetch machines when modal opens
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/machines")
+      .then((r) => (r.ok ? r.json() : { machines: [] }))
+      .then((data: { machines: DbMachine[] }) => setMachines(data.machines))
+      .catch(() => {});
+  }, [open]);
 
   function handleReset() {
     setStep("input");
@@ -76,6 +98,7 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
     setEditTitle("");
     setEditMachine("");
     setEditType("timeseries");
+    setSelectedMachine("");
   }
 
   function handleOpenChange(nextOpen: boolean) {
@@ -91,11 +114,16 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
     setStep("analyzing");
     setErrorMessage("");
 
+    // Append selected machine to prompt so AI always has a concrete machine name
+    const fullPrompt = selectedMachine
+      ? `${prompt.trim()} on machine ${selectedMachine}`
+      : prompt.trim();
+
     try {
       const res = await fetch("/api/chat/create-widget", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt.trim() }),
+        body: JSON.stringify({ prompt: fullPrompt }),
       });
 
       if (!res.ok) {
@@ -112,7 +140,7 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
 
       if (data.matched && data.widgetTitle && data.machine && data.widgetType) {
         setEditTitle(data.widgetTitle);
-        setEditMachine(data.machine);
+        setEditMachine(selectedMachine || data.machine);
         setEditType(data.widgetType);
         setStep("review");
       } else {
@@ -190,28 +218,40 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              <Textarea
-                placeholder='e.g. "Show CPU usage on web-server-1 over time"'
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                rows={3}
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleAnalyze();
-                  }
-                }}
-              />
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Machine</label>
+                <select
+                  value={selectedMachine}
+                  onChange={(e) => setSelectedMachine(e.target.value)}
+                  className="border-input bg-background h-9 w-full rounded-md border px-3 py-1 text-sm"
+                >
+                  <option value="">Select a machine...</option>
+                  {machines.map((m) => (
+                    <option key={m.id} value={m.name}>
+                      {m.name}{m.hostname && m.hostname !== m.name ? ` (${m.hostname})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">What do you want to visualize?</label>
+                <Textarea
+                  placeholder='e.g. "CPU usage over time" or "memory trend"'
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  rows={3}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleAnalyze();
+                    }
+                  }}
+                />
+              </div>
               <div className="flex flex-wrap gap-2">
-                <p className="w-full text-xs text-muted-foreground">
-                  Examples:
-                </p>
-                {[
-                  "Show CPU usage on web-server-1",
-                  "Memory usage trend for db-primary",
-                  "Disk space on prod-server",
-                ].map((example) => (
+                <p className="w-full text-xs text-muted-foreground">Quick picks:</p>
+                {["CPU usage", "Memory usage", "Disk usage"].map((example) => (
                   <button
                     key={example}
                     type="button"
@@ -224,7 +264,7 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleAnalyze} disabled={!prompt.trim()}>
+              <Button onClick={handleAnalyze} disabled={!prompt.trim() || !selectedMachine}>
                 <Sparkles className="mr-2 h-4 w-4" />
                 Analyze
               </Button>
@@ -279,35 +319,29 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
                     Type
                   </p>
                   {editing ? (
-                    <div className="mt-1 flex gap-2">
-                      {WIDGET_TYPE_OPTIONS.map((t) => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => setEditType(t)}
-                          className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors ${
-                            editType === t
-                              ? "border-foreground bg-foreground text-background"
-                              : "border-border text-muted-foreground hover:border-foreground"
-                          }`}
-                        >
-                          {t === "timeseries" ? "Time Series" : "Stat"}
-                        </button>
-                      ))}
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {WIDGET_TYPE_OPTIONS.map((t) => {
+                        const meta = WIDGET_TYPE_META[t];
+                        return (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => setEditType(t)}
+                            className={`flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors ${
+                              editType === t
+                                ? "border-foreground bg-foreground text-background"
+                                : "border-border text-muted-foreground hover:border-foreground"
+                            }`}
+                          >
+                            {meta.icon}{meta.label}
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : (
-                    <Badge variant="secondary" className="mt-1">
-                      {editType === "timeseries" ? (
-                        <>
-                          <Activity className="mr-1 h-3 w-3" />
-                          Time Series
-                        </>
-                      ) : (
-                        <>
-                          <Gauge className="mr-1 h-3 w-3" />
-                          Stat
-                        </>
-                      )}
+                    <Badge variant="secondary" className="mt-1 gap-1">
+                      {WIDGET_TYPE_META[editType]?.icon}
+                      {WIDGET_TYPE_META[editType]?.label ?? editType}
                     </Badge>
                   )}
                 </div>
@@ -316,11 +350,15 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
                     Machine
                   </p>
                   {editing ? (
-                    <Input
+                    <select
                       value={editMachine}
                       onChange={(e) => setEditMachine(e.target.value)}
-                      className="mt-1 h-8"
-                    />
+                      className="border-input bg-background mt-1 h-8 w-full rounded-md border px-2 text-sm"
+                    >
+                      {machines.map((m) => (
+                        <option key={m.id} value={m.name}>{m.name}</option>
+                      ))}
+                    </select>
                   ) : (
                     <p className="mt-1 text-sm">{editMachine}</p>
                   )}

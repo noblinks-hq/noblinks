@@ -29,6 +29,8 @@ const capabilities = [
     defaultThreshold: 80,
     defaultWindow: "5m",
     suggestedSeverity: "warning",
+    scrapeQuery:
+      "(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100",
   },
   {
     capabilityKey: "linux_cpu_usage_high",
@@ -47,6 +49,8 @@ const capabilities = [
     defaultThreshold: 80,
     defaultWindow: "5m",
     suggestedSeverity: "warning",
+    scrapeQuery:
+      '100 - avg(rate(node_cpu_seconds_total{mode="idle"}[2m])) * 100',
   },
   {
     capabilityKey: "linux_disk_usage_high",
@@ -65,6 +69,8 @@ const capabilities = [
     defaultThreshold: 85,
     defaultWindow: "10m",
     suggestedSeverity: "critical",
+    scrapeQuery:
+      '(1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|devtmpfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|devtmpfs"}) * 100',
   },
 ];
 
@@ -87,6 +93,7 @@ async function seed() {
           defaultThreshold: cap.defaultThreshold,
           defaultWindow: cap.defaultWindow,
           suggestedSeverity: cap.suggestedSeverity,
+          scrapeQuery: cap.scrapeQuery,
         },
       });
     console.log(`  ✓ ${cap.capabilityKey}`);
