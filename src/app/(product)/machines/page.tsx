@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Layers, Monitor } from "lucide-react";
+import { ExternalLink, Layers, Monitor } from "lucide-react";
 import { CreateEnvironmentModal } from "@/components/product/create-environment-modal";
 import { RemoveMachineModal } from "@/components/product/remove-machine-modal";
 import { Badge } from "@/components/ui/badge";
@@ -14,17 +14,23 @@ interface EnvironmentWithStats extends Environment {
   machineCount: number;
   onlineCount: number;
   pendingCount: number;
+  offlineCount: number;
 }
 
 function statusColor(status: string) {
   if (status === "online") return "bg-green-500";
   if (status === "pending") return "bg-amber-500";
+  if (status === "offline") return "bg-red-500";
   return "bg-muted-foreground";
 }
+
+const MACHINE_PAGE_SIZE = 20;
 
 export default function MachinesPage() {
   const [environments, setEnvironments] = useState<EnvironmentWithStats[]>([]);
   const [unassigned, setUnassigned] = useState<DbMachine[]>([]);
+  const [unassignedHasMore, setUnassignedHasMore] = useState(false);
+  const [loadingMoreUnassigned, setLoadingMoreUnassigned] = useState(false);
   const [loading, setLoading] = useState(true);
   const [removeMachine, setRemoveMachine] = useState<DbMachine | null>(null);
 
@@ -32,7 +38,7 @@ export default function MachinesPage() {
     try {
       const [envsRes, machinesRes] = await Promise.all([
         fetch("/api/environments"),
-        fetch("/api/machines"),
+        fetch(`/api/machines?limit=200`),
       ]);
       if (envsRes.ok && machinesRes.ok) {
         const envs = (await envsRes.json()) as Environment[];
@@ -40,7 +46,9 @@ export default function MachinesPage() {
           machines: DbMachine[];
         };
 
-        setUnassigned(machines.filter((m) => !m.environmentId));
+        const unassignedAll = machines.filter((m) => !m.environmentId);
+        setUnassigned(unassignedAll.slice(0, MACHINE_PAGE_SIZE));
+        setUnassignedHasMore(unassignedAll.length > MACHINE_PAGE_SIZE);
 
         setEnvironments(
           envs.map((env) => {
@@ -52,6 +60,7 @@ export default function MachinesPage() {
               machineCount: envMachines.length,
               onlineCount: envMachines.filter((m) => m.status === "online").length,
               pendingCount: envMachines.filter((m) => m.status === "pending").length,
+              offlineCount: envMachines.filter((m) => m.status === "offline").length,
             };
           })
         );
@@ -60,6 +69,21 @@ export default function MachinesPage() {
       setLoading(false);
     }
   }, []);
+
+  async function loadMoreUnassigned() {
+    setLoadingMoreUnassigned(true);
+    try {
+      const res = await fetch(`/api/machines?limit=${MACHINE_PAGE_SIZE}&offset=${unassigned.length}`);
+      if (res.ok) {
+        const data = await res.json() as { machines: DbMachine[]; hasMore: boolean };
+        const more = data.machines.filter((m) => !m.environmentId);
+        setUnassigned((prev) => [...prev, ...more]);
+        setUnassignedHasMore(data.hasMore);
+      }
+    } finally {
+      setLoadingMoreUnassigned(false);
+    }
+  }
 
   useEffect(() => {
     fetchData();
@@ -84,10 +108,16 @@ export default function MachinesPage() {
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
           <Layers className="h-10 w-10 text-muted-foreground" />
           <h3 className="mt-4 text-lg font-semibold">No machines yet</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Install the agent on a Linux machine, or create an environment to
-            organize your machines.
+          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+            Install the Noblinks agent on a Linux machine to start monitoring.
+            The install command is in your Settings.
           </p>
+          <Button asChild variant="outline" className="mt-4">
+            <Link href="/settings">
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Go to Settings for install command
+            </Link>
+          </Button>
         </div>
       ) : (
         <div className="space-y-8">
@@ -100,7 +130,7 @@ export default function MachinesPage() {
                 </h2>
                 <Badge variant="outline">{unassigned.length}</Badge>
               </div>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {unassigned.map((m) => (
                   <div
                     key={m.id}
@@ -117,6 +147,11 @@ export default function MachinesPage() {
                       <span className={`h-1.5 w-1.5 rounded-full ${statusColor(m.status)}`} />
                       {m.status}
                     </span>
+                    {m.needsUpdate && (
+                      <Badge variant="outline" className="text-xs text-amber-600 border-amber-500/50 shrink-0">
+                        Update available
+                      </Badge>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -128,6 +163,13 @@ export default function MachinesPage() {
                   </div>
                 ))}
               </div>
+              {unassignedHasMore && (
+                <div className="flex justify-center pt-1">
+                  <Button variant="outline" size="sm" onClick={loadMoreUnassigned} disabled={loadingMoreUnassigned}>
+                    {loadingMoreUnassigned ? "Loading..." : "Show more"}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
@@ -158,6 +200,12 @@ export default function MachinesPage() {
                           <span className="flex items-center gap-1">
                             <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
                             {env.onlineCount} online
+                          </span>
+                        )}
+                        {env.offlineCount > 0 && (
+                          <span className="flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                            {env.offlineCount} offline
                           </span>
                         )}
                         {env.pendingCount > 0 && (

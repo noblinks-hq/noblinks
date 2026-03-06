@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { Copy, Globe, GlobeLock, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { EditDashboardModal } from "@/components/product/edit-dashboard-modal";
 import {
@@ -56,7 +56,46 @@ export function DashboardCard({
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [publicToken, setPublicToken] = useState<string | null>(dashboard.publicToken ?? null);
   const gradient = categoryColors[dashboard.category] ?? categoryColors.custom;
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://noblinks.com";
+
+  async function handleShare() {
+    setSharing(true);
+    try {
+      const r = await fetch(`/api/dashboards/${dashboard.id}/share`, { method: "POST" });
+      const data = (await r.json()) as { token?: string };
+      if (data.token) {
+        setPublicToken(data.token);
+        const url = `${appUrl}/share/${data.token}`;
+        await navigator.clipboard.writeText(url);
+        toast.success("Share link copied to clipboard");
+      }
+    } catch {
+      toast.error("Failed to create share link");
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  async function handleCopyShareLink() {
+    if (!publicToken) return;
+    const url = `${appUrl}/share/${publicToken}`;
+    await navigator.clipboard.writeText(url);
+    toast.success("Share link copied");
+  }
+
+  async function handleRevokeShare() {
+    try {
+      await fetch(`/api/dashboards/${dashboard.id}/share`, { method: "DELETE" });
+      setPublicToken(null);
+      toast.success("Share link revoked");
+    } catch {
+      toast.error("Failed to revoke share link");
+    }
+  }
 
   async function handleDelete() {
     setDeleting(true);
@@ -98,6 +137,23 @@ export function DashboardCard({
                 <Pencil className="mr-2 h-4 w-4" />
                 Edit
               </DropdownMenuItem>
+              {publicToken ? (
+                <>
+                  <DropdownMenuItem onClick={handleCopyShareLink}>
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy Share Link
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleRevokeShare}>
+                    <GlobeLock className="mr-2 h-4 w-4" />
+                    Revoke Sharing
+                  </DropdownMenuItem>
+                </>
+              ) : (
+                <DropdownMenuItem onClick={handleShare} disabled={sharing}>
+                  <Globe className="mr-2 h-4 w-4" />
+                  {sharing ? "Creating link…" : "Share"}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 onClick={() => setDeleteOpen(true)}
                 className="text-destructive focus:text-destructive"

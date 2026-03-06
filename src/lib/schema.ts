@@ -91,6 +91,7 @@ export const organization = pgTable("organization", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   metadata: text("metadata"),
   agentRegistrationToken: text("agent_registration_token").unique(),
+  notificationEmail: text("notification_email"),
 });
 
 export const member = pgTable(
@@ -148,6 +149,7 @@ export const dashboard = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     visualizationCount: integer("visualization_count").default(0).notNull(),
+    publicToken: text("public_token").unique(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -233,6 +235,10 @@ export const alert = pgTable(
     severity: text("severity").default("warning").notNull(), // critical | warning | info
     promqlQuery: text("promql_query").notNull(),
     status: text("status").default("configured").notNull(), // configured | active | firing | resolved
+    notifyOnFire: boolean("notify_on_fire").default(true).notNull(),
+    notifyOnResolve: boolean("notify_on_resolve").default(true).notNull(),
+    firedAt: timestamp("fired_at"),
+    resolvedAt: timestamp("resolved_at"),
     createdBy: text("created_by")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -308,6 +314,38 @@ export const agentQuery = pgTable(
   ]
 );
 
+export const alertEvent = pgTable(
+  "alert_event",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    alertId: uuid("alert_id")
+      .notNull()
+      .references(() => alert.id, { onDelete: "cascade" }),
+    event: text("event").notNull(), // "fired" | "resolved"
+    occurredAt: timestamp("occurred_at").defaultNow().notNull(),
+    details: jsonb("details"),
+  },
+  (table) => [
+    index("alert_event_alert_id_idx").on(table.alertId, table.occurredAt),
+  ]
+);
+
+export const notificationChannel = pgTable(
+  "notification_channel",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    type: text("type").notNull(), // "email" | "slack"
+    config: jsonb("config").notNull(), // { email: string } | { webhookUrl: string }
+    enabled: boolean("enabled").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("notification_channel_org_idx").on(table.organizationId)]
+);
+
 export const machine = pgTable(
   "machine",
   {
@@ -323,6 +361,7 @@ export const machine = pgTable(
     status: text("status").default("online").notNull(),
     lastSeen: timestamp("last_seen"),
     agentTokenHash: text("agent_token_hash").unique(),
+    needsUpdate: boolean("needs_update").default(false).notNull(),
     environmentId: uuid("environment_id").references(() => environment.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")

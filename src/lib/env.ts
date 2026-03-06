@@ -25,6 +25,10 @@ const serverEnvSchema = z.object({
   OPENROUTER_API_KEY: z.string().optional(),
   OPENROUTER_MODEL: z.string().default("openai/gpt-5-mini"),
 
+  // Polar payments
+  POLAR_ACCESS_TOKEN: z.string().optional(),
+  POLAR_WEBHOOK_SECRET: z.string().optional(),
+
   // Storage
   BLOB_READ_WRITE_TOKEN: z.string().optional(),
 
@@ -110,6 +114,10 @@ export function checkEnv(): void {
 
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     warnings.push("BLOB_READ_WRITE_TOKEN is not set. Using local storage for file uploads.");
+  }
+
+  if (!process.env.POLAR_ACCESS_TOKEN) {
+    warnings.push("POLAR_ACCESS_TOKEN is not set. Payment features will not work.");
   }
 
   // Log warnings in development

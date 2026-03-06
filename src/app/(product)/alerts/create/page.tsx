@@ -68,6 +68,7 @@ export default function CreateAlertPage() {
   const [editSeverity, setEditSeverity] = useState<AlertSeverity>("warning");
   const [editing, setEditing] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState("");
+  const [limitReached, setLimitReached] = useState(false);
 
   async function handleAnalyze() {
     if (!prompt.trim()) return;
@@ -142,6 +143,17 @@ export default function CreateAlertPage() {
         setDuplicateWarning(data.message);
         setStep("review");
         return;
+      }
+
+      if (res.status === 403) {
+        const data = await res.json();
+        if (data.error === "limit_reached") {
+          setErrorKind("api");
+          setLimitReached(true);
+          setErrorMessage(`You've reached the ${data.limit}-alert limit on the Free plan. Upgrade to Pro or Team to create unlimited alerts.`);
+          setStep("error");
+          return;
+        }
       }
 
       if (!res.ok) {
@@ -464,13 +476,17 @@ export default function CreateAlertPage() {
                 <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
               </div>
               <div>
-                <p className="font-semibold">AI service error</p>
+                <p className="font-semibold">{limitReached ? "Plan limit reached" : "AI service error"}</p>
                 <p className="text-sm text-muted-foreground">{errorMessage}</p>
               </div>
             </div>
 
             <div className="flex gap-3">
-              <Button onClick={handleReset}>Try Again</Button>
+              {limitReached ? (
+                <Button onClick={() => router.push("/pricing")}>Upgrade Plan</Button>
+              ) : (
+                <Button onClick={handleReset}>Try Again</Button>
+              )}
               <Button variant="outline" onClick={() => router.push("/alerts")}>
                 Back to Alerts
               </Button>

@@ -4,36 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useNoblinks } from "@/context/noblinks-context";
-import type { AiInsight } from "@/lib/types";
+import { Skeleton } from "@/components/ui/skeleton";
+import type { DbMachine } from "@/lib/types";
 
 const severityDotColor: Record<string, string> = {
   critical: "bg-red-500",
   warning: "bg-amber-500",
 };
-
-const aiInsights: AiInsight[] = [
-  {
-    id: "insight-1",
-    message: "Disk usage trending toward 90% within 2 days",
-    machineId: "machine-prod-api-1",
-    machineName: "prod-api-1",
-    confidence: "High confidence",
-  },
-  {
-    id: "insight-2",
-    message: "Memory growth anomaly detected",
-    machineId: "machine-k8s-cluster-1",
-    machineName: "k8s-cluster-1",
-    confidence: "Medium confidence",
-  },
-  {
-    id: "insight-3",
-    message: "CPU saturation spikes increasing",
-    machineId: "machine-prod-api-1",
-    machineName: "prod-api-1",
-  },
-];
 
 interface DbAlertRow {
   id: string;
@@ -55,27 +32,46 @@ function timeAgo(iso: string): string {
 }
 
 export default function OverviewPage() {
-  const { machines } = useNoblinks();
   const [dbAlerts, setDbAlerts] = useState<DbAlertRow[]>([]);
+  const [machines, setMachines] = useState<DbMachine[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/alerts")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!cancelled && data) setDbAlerts(data.alerts);
+    Promise.all([
+      fetch("/api/alerts").then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/machines").then((r) => (r.ok ? r.json() : null)),
+    ])
+      .then(([alertData, machineData]) => {
+        if (cancelled) return;
+        if (alertData) setDbAlerts(alertData.alerts ?? []);
+        if (machineData) setMachines(machineData.machines ?? []);
+        setLastUpdated(new Date());
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => { cancelled = true; };
   }, []);
 
   const firingAlerts = dbAlerts.filter((a) => a.status === "firing");
   const offlineMachines = machines.filter((m) => m.status === "offline");
+  const allClear = !loading && firingAlerts.length === 0 && offlineMachines.length === 0;
 
-  const allClear =
-    firingAlerts.length === 0 &&
-    offlineMachines.length === 0 &&
-    aiInsights.length === 0;
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-10 py-4">
+        <section>
+          <Skeleton className="h-6 w-40 mb-3" />
+          <div className="space-y-3">
+            {[1, 2].map((i) => <Skeleton key={i} className="h-16 rounded-lg" />)}
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-10 py-4">
@@ -99,8 +95,7 @@ export default function OverviewPage() {
                     className="mt-0.5 text-sm text-muted-foreground"
                     suppressHydrationWarning
                   >
-                    {alert.machine} &middot; Created{" "}
-                    {timeAgo(alert.createdAt)}
+                    {alert.machine} &middot; Created {timeAgo(alert.createdAt)}
                   </p>
                 </div>
                 <Button variant="ghost" size="sm" asChild>
@@ -118,50 +113,20 @@ export default function OverviewPage() {
           <h2 className="text-lg font-semibold">Offline Machines</h2>
           <div className="mt-1 border-b" />
           <div className="mt-4 space-y-3">
-            {offlineMachines.map((machine) => (
+            {offlineMachines.map((m) => (
               <div
-                key={machine.id}
+                key={m.id}
                 className="flex items-center gap-4 rounded-lg border px-5 py-4 transition-colors hover:bg-muted/50"
               >
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-yellow-500" />
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" />
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium">{machine.name}</p>
-                  <p className="mt-0.5 text-sm text-muted-foreground">
-                    Last seen {machine.lastSeen}
+                  <p className="font-medium">{m.name}</p>
+                  <p className="mt-0.5 text-sm text-muted-foreground" suppressHydrationWarning>
+                    {m.lastSeen ? `Last seen ${timeAgo(m.lastSeen)}` : "Never connected"}
                   </p>
                 </div>
                 <Button variant="ghost" size="sm" asChild>
-                  <Link href={`/machines/${machine.id}`}>View Machine</Link>
-                </Button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* AI Insights */}
-      {aiInsights.length > 0 && (
-        <section>
-          <h2 className="text-lg font-semibold">AI Insights</h2>
-          <div className="mt-1 border-b" />
-          <div className="mt-4 space-y-3">
-            {aiInsights.map((insight) => (
-              <div
-                key={insight.id}
-                className="flex items-center gap-4 rounded-lg border px-5 py-4 transition-colors hover:bg-muted/50"
-              >
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500" />
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium">{insight.message}</p>
-                  <p className="mt-0.5 text-sm text-muted-foreground">
-                    {insight.machineName}
-                    {insight.confidence && (
-                      <> &middot; {insight.confidence}</>
-                    )}
-                  </p>
-                </div>
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href={`/machines/${insight.machineId}`}>Review</Link>
+                  <Link href={`/machines/${m.id}`}>View Machine</Link>
                 </Button>
               </div>
             ))}
@@ -173,13 +138,22 @@ export default function OverviewPage() {
       {allClear && (
         <div className="flex flex-col items-center justify-center py-32 text-center">
           <CheckCircle2 className="h-12 w-12 text-green-500" />
-          <h2 className="mt-6 text-2xl font-semibold">
-            All systems operational
-          </h2>
+          <h2 className="mt-6 text-2xl font-semibold">All systems operational</h2>
           <p className="mt-2 text-muted-foreground">
-            No active alerts or risks detected.
+            No active alerts or offline machines detected.
           </p>
+          {lastUpdated && (
+            <p className="mt-2 text-xs text-muted-foreground" suppressHydrationWarning>
+              Last updated {lastUpdated.toLocaleTimeString()}
+            </p>
+          )}
         </div>
+      )}
+
+      {lastUpdated && !allClear && (
+        <p className="text-xs text-muted-foreground" suppressHydrationWarning>
+          Last updated {lastUpdated.toLocaleTimeString()}
+        </p>
       )}
     </div>
   );

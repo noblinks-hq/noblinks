@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Copy, Eye, EyeOff, RefreshCw, X } from "lucide-react";
+import { Bell, Check, Copy, Eye, EyeOff, Mail, Plus, RefreshCw, Slack, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
+import { BillingButton } from "@/components/product/billing-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,9 +62,7 @@ export default function SettingsPage() {
             <Label>Plan</Label>
             <div className="flex items-center gap-3">
               <Badge variant="secondary">{plan}</Badge>
-              <Button variant="outline" size="sm" disabled>
-                Upgrade Plan
-              </Button>
+              <BillingButton />
             </div>
           </div>
         </div>
@@ -79,28 +78,10 @@ export default function SettingsPage() {
       <PendingInvitations />
 
       {/* Notifications */}
-      <div className="rounded-lg border p-6 space-y-4">
-        <h2 className="text-lg font-semibold">Notifications</h2>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="notif-email">Notification Email</Label>
-            {isPending ? (
-              <Skeleton className="h-10 w-full" />
-            ) : (
-              <Input
-                id="notif-email"
-                type="email"
-                value={session?.user?.email || ""}
-                readOnly
-              />
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label>Alert Channels</Label>
-            <p className="text-sm text-muted-foreground">Email only</p>
-          </div>
-        </div>
-      </div>
+      <NotificationsSection />
+
+      {/* Notification Channels */}
+      <NotificationChannelsSection />
 
       {/* Agent Integration */}
       <AgentIntegrationSection />
@@ -417,6 +398,264 @@ function AgentIntegrationSection() {
           <Link href="/machines">View Connected Machines</Link>
         </Button>
       </div>
+    </div>
+  );
+}
+
+function NotificationsSection() {
+  const [email, setEmail] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/org/notification-email")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { notificationEmail: string | null } | null) => {
+        if (data?.notificationEmail) setEmail(data.notificationEmail);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const r = await fetch("/api/org/notification-email", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notificationEmail: email }),
+      });
+      if (r.ok) {
+        toast.success("Notification email saved");
+      } else {
+        toast.error("Failed to save");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border p-6 space-y-4">
+      <h2 className="text-lg font-semibold">Notifications</h2>
+      <form onSubmit={handleSave} className="flex flex-col gap-4 sm:flex-row sm:items-end">
+        <div className="flex-1 space-y-2">
+          <Label htmlFor="notif-email">Notification Email</Label>
+          {loading ? (
+            <Skeleton className="h-10 w-full" />
+          ) : (
+            <Input
+              id="notif-email"
+              type="email"
+              placeholder="alerts@yourcompany.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          )}
+          <p className="text-xs text-muted-foreground">
+            Alert fire and resolve notifications will be sent to this address.
+          </p>
+        </div>
+        <Button type="submit" disabled={saving || loading}>
+          {saving ? "Saving..." : "Save"}
+        </Button>
+      </form>
+    </div>
+  );
+}
+
+interface NotifChannel {
+  id: string;
+  name: string;
+  type: string;
+  config: Record<string, string>;
+  enabled: boolean;
+}
+
+function NotificationChannelsSection() {
+  const [channels, setChannels] = useState<NotifChannel[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [type, setType] = useState<"email" | "slack">("email");
+  const [name, setName] = useState("");
+  const [configValue, setConfigValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/notification-channels")
+      .then((r) => (r.ok ? r.json() : { channels: [] }))
+      .then((data: { channels: NotifChannel[] }) => setChannels(data.channels))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const config = type === "email" ? { email: configValue } : { webhookUrl: configValue };
+      const r = await fetch("/api/notification-channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, type, config }),
+      });
+      if (r.ok) {
+        const data = (await r.json()) as { channel: NotifChannel };
+        setChannels((prev) => [...prev, data.channel]);
+        setShowForm(false);
+        setName("");
+        setConfigValue("");
+        toast.success("Channel added");
+      } else {
+        const err = (await r.json()) as { error: string };
+        toast.error(err.error ?? "Failed to add channel");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleToggle(ch: NotifChannel) {
+    const r = await fetch(`/api/notification-channels/${ch.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: !ch.enabled }),
+    });
+    if (r.ok) {
+      const data = (await r.json()) as { channel: NotifChannel };
+      setChannels((prev) => prev.map((c) => (c.id === ch.id ? data.channel : c)));
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    try {
+      const r = await fetch(`/api/notification-channels/${id}`, { method: "DELETE" });
+      if (r.ok) {
+        setChannels((prev) => prev.filter((c) => c.id !== id));
+        toast.success("Channel removed");
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  const channelLabel = (ch: NotifChannel) => {
+    if (ch.type === "email") return ch.config.email ?? "";
+    if (ch.type === "slack") return "Slack Webhook";
+    return ch.type;
+  };
+
+  return (
+    <div className="rounded-lg border p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Notification Channels</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Receive alerts via email or Slack in addition to the notification email above.
+          </p>
+        </div>
+        {!showForm && (
+          <Button size="sm" variant="outline" onClick={() => setShowForm(true)}>
+            <Plus className="mr-1 h-4 w-4" />
+            Add Channel
+          </Button>
+        )}
+      </div>
+
+      {/* Add form */}
+      {showForm && (
+        <form onSubmit={handleAdd} className="rounded-md border p-4 space-y-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="space-y-1">
+              <Label htmlFor="ch-type">Type</Label>
+              <select
+                id="ch-type"
+                value={type}
+                onChange={(e) => { setType(e.target.value as "email" | "slack"); setConfigValue(""); }}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="email">Email</option>
+                <option value="slack">Slack</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="ch-name">Name</Label>
+              <Input
+                id="ch-name"
+                placeholder="e.g. On-call email"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="ch-value">
+                {type === "email" ? "Email Address" : "Webhook URL"}
+              </Label>
+              <Input
+                id="ch-value"
+                type={type === "email" ? "email" : "url"}
+                placeholder={type === "email" ? "alerts@company.com" : "https://hooks.slack.com/..."}
+                value={configValue}
+                onChange={(e) => setConfigValue(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button type="submit" size="sm" disabled={saving}>
+              {saving ? "Adding…" : "Add"}
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => { setShowForm(false); setName(""); setConfigValue(""); }}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      )}
+
+      {/* Channel list */}
+      {loading ? (
+        <Skeleton className="h-14 w-full" />
+      ) : channels.length === 0 ? (
+        <div className="flex items-center gap-3 rounded-md border border-dashed px-4 py-5 text-sm text-muted-foreground">
+          <Bell className="h-5 w-5 shrink-0" />
+          No notification channels configured yet.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {channels.map((ch) => (
+            <div key={ch.id} className="flex items-center gap-3 rounded-md border px-4 py-3">
+              {ch.type === "email" ? (
+                <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
+              ) : (
+                <Slack className="h-4 w-4 shrink-0 text-muted-foreground" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{ch.name}</p>
+                <p className="text-xs text-muted-foreground truncate">{channelLabel(ch)}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleToggle(ch)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${ch.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}
+                title={ch.enabled ? "Disable" : "Enable"}
+              >
+                <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${ch.enabled ? "translate-x-4" : "translate-x-0"}`} />
+              </button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleDelete(ch.id)}
+                disabled={deletingId === ch.id}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span className="sr-only">Delete</span>
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

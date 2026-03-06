@@ -35,9 +35,16 @@ export function SiteHeader() {
               </span>
             </Link>
           </h1>
-          <div className="flex items-center gap-4" role="group" aria-label="User actions">
-            <UserProfile />
-            <ModeToggle />
+          <div className="flex items-center gap-6">
+            <nav className="hidden sm:flex items-center gap-5 text-sm text-muted-foreground">
+              <Link href="/pricing" className="hover:text-foreground transition-colors">
+                Pricing
+              </Link>
+            </nav>
+            <div className="flex items-center gap-4" role="group" aria-label="User actions">
+              <UserProfile />
+              <ModeToggle />
+            </div>
           </div>
         </nav>
       </header>

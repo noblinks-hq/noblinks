@@ -14,7 +14,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Top bar */}
-          <header className="flex h-14 items-center justify-end gap-4 border-b px-6">
+          <header className="flex h-14 items-center justify-end gap-4 border-b pl-14 pr-6 md:pl-6">
             <UserProfile />
             <ModeToggle />
           </header>

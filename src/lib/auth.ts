@@ -1,8 +1,16 @@
+import { polar, checkout, portal, webhooks } from "@polar-sh/better-auth"
+import { Polar } from "@polar-sh/sdk"
 import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { organization } from "better-auth/plugins"
 import { createAccessControl } from "better-auth/plugins/access"
 import { db } from "./db"
+import { PRODUCT_PLAN_MAP, setOrgPlan } from "./plan"
+
+const polarClient = new Polar({
+  accessToken: process.env.POLAR_ACCESS_TOKEN,
+  server: process.env.POLAR_SERVER === "production" ? "production" : "sandbox",
+})
 
 const statement = {
   organization: ["update", "delete"],
@@ -59,6 +67,41 @@ export const auth = betterAuth({
     },
   },
   plugins: [
+    polar({
+      client: polarClient,
+      createCustomerOnSignUp: true,
+      use: [
+        checkout({
+          products: [
+            { productId: "57ebfc19-4a1b-4259-a116-d8a0833b7da3", slug: "pro" },
+            { productId: "51543af2-05cb-4321-874e-c6ae4bcf38b0", slug: "team" },
+            // TODO: replace with real annual product IDs from Polar dashboard
+            { productId: "REPLACE_WITH_POLAR_PRO_ANNUAL_PRODUCT_ID", slug: "pro-annual" },
+            { productId: "REPLACE_WITH_POLAR_TEAM_ANNUAL_PRODUCT_ID", slug: "team-annual" },
+          ],
+          successUrl: "/pricing/success?checkout_id={CHECKOUT_ID}",
+          authenticatedUsersOnly: true,
+        }),
+        portal(),
+        webhooks({
+          secret: process.env.POLAR_WEBHOOK_SECRET ?? "",
+          onSubscriptionActive: async (payload) => {
+            const productId = payload.data.productId
+            const orgId = (payload.data.metadata as Record<string, string> | undefined)?.referenceId
+            if (orgId) {
+              const plan = PRODUCT_PLAN_MAP[productId] ?? "pro"
+              await setOrgPlan(orgId, plan)
+            }
+          },
+          onSubscriptionCanceled: async (payload) => {
+            const orgId = (payload.data.metadata as Record<string, string> | undefined)?.referenceId
+            if (orgId) {
+              await setOrgPlan(orgId, "free")
+            }
+          },
+        }),
+      ],
+    }),
     organization({
       ac,
       roles: {

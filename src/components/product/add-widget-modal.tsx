@@ -31,6 +31,11 @@ import type { DbMachine, WidgetType } from "@/lib/types";
 interface AddWidgetModalProps {
   dashboardId: string;
   onCreated: () => void;
+  // Optional controlled mode (used when opening from Browse Metrics)
+  externalOpen?: boolean;
+  onExternalOpenChange?: (open: boolean) => void;
+  prefillPrompt?: string;
+  prefillMachine?: string;
 }
 
 interface AiWidgetResult {
@@ -63,8 +68,10 @@ const WIDGET_TYPE_META: Record<WidgetType, { label: string; icon: React.ReactNod
   toplist:    { label: "Top List",    icon: <AlignLeft className="h-3.5 w-3.5" /> },
 };
 
-export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) {
-  const [open, setOpen] = useState(false);
+export function AddWidgetModal({ dashboardId, onCreated, externalOpen, onExternalOpenChange, prefillPrompt, prefillMachine }: AddWidgetModalProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = externalOpen !== undefined;
+  const open = isControlled ? externalOpen : internalOpen;
   const [step, setStep] = useState<Step>("input");
   const [prompt, setPrompt] = useState("");
   const [aiResult, setAiResult] = useState<AiWidgetResult | null>(null);
@@ -88,23 +95,27 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
       .catch(() => {});
   }, [open]);
 
-  function handleReset() {
+  function handleReset(initialPrompt = "", initialMachine = "") {
     setStep("input");
-    setPrompt("");
+    setPrompt(initialPrompt);
     setAiResult(null);
     setErrorMessage("");
     setErrorKind("api");
     setEditing(false);
     setEditTitle("");
-    setEditMachine("");
+    setEditMachine(initialMachine);
     setEditType("timeseries");
-    setSelectedMachine("");
+    setSelectedMachine(initialMachine);
   }
 
   function handleOpenChange(nextOpen: boolean) {
-    setOpen(nextOpen);
+    if (isControlled) {
+      onExternalOpenChange?.(nextOpen);
+    } else {
+      setInternalOpen(nextOpen);
+    }
     if (nextOpen) {
-      handleReset();
+      handleReset(prefillPrompt ?? "", prefillMachine ?? "");
     }
   }
 
@@ -200,18 +211,20 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
   }
 
   function handleDone() {
-    setOpen(false);
+    handleOpenChange(false);
     onCreated();
   }
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button>
-          <Sparkles className="mr-2 h-4 w-4" />
-          Add Widget
-        </Button>
-      </DialogTrigger>
+      {!isControlled && (
+        <DialogTrigger asChild>
+          <Button>
+            <Sparkles className="mr-2 h-4 w-4" />
+            Add Widget
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-2xl">
         {/* Step: Input */}
         {step === "input" && (
@@ -341,7 +354,7 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
                 <Sparkles className="mr-2 h-4 w-4" />
                 Analyze
               </Button>
-              <Button variant="ghost" onClick={handleReset}>Cancel</Button>
+              <Button variant="ghost" onClick={() => handleReset()}>Cancel</Button>
             </DialogFooter>
           </>
         )}
@@ -403,7 +416,7 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
                 <Check className="mr-2 h-4 w-4" />
                 Looks good, proceed
               </Button>
-              <Button variant="ghost" onClick={handleReset}>
+              <Button variant="ghost" onClick={() => handleReset()}>
                 Cancel
               </Button>
             </DialogFooter>
@@ -521,7 +534,7 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
               <Button variant="outline" onClick={() => setEditing(!editing)}>
                 {editing ? "Done Editing" : "Edit"}
               </Button>
-              <Button variant="ghost" onClick={handleReset}>
+              <Button variant="ghost" onClick={() => handleReset()}>
                 Cancel
               </Button>
             </DialogFooter>
@@ -565,8 +578,8 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleReset}>Try Again</Button>
-              <Button variant="ghost" onClick={() => setOpen(false)}>
+              <Button onClick={() => handleReset()}>Try Again</Button>
+              <Button variant="ghost" onClick={() => handleOpenChange(false)}>
                 Close
               </Button>
             </DialogFooter>
@@ -586,8 +599,8 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleReset}>Try Again</Button>
-              <Button variant="ghost" onClick={() => setOpen(false)}>
+              <Button onClick={() => handleReset()}>Try Again</Button>
+              <Button variant="ghost" onClick={() => handleOpenChange(false)}>
                 Close
               </Button>
             </DialogFooter>

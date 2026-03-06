@@ -2,7 +2,29 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { orgScope } from "@/lib/org";
 import { dashboard } from "@/lib/schema";
-import { requireApiPermission } from "@/lib/session";
+import { requireApiAuth, requireApiPermission } from "@/lib/session";
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { session, error } = await requireApiAuth();
+  if (error) return error;
+
+  const { id } = await params;
+
+  const [found] = await db
+    .select()
+    .from(dashboard)
+    .where(and(eq(dashboard.id, id), eq(dashboard.organizationId, orgScope(session))))
+    .limit(1);
+
+  if (!found) {
+    return Response.json({ error: "Dashboard not found" }, { status: 404 });
+  }
+
+  return Response.json(found);
+}
 
 export async function PATCH(
   request: Request,

@@ -1,8 +1,11 @@
-import { eq, and } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { orgScope } from "@/lib/org";
+import { getOrgPlan, PLAN_LIMITS } from "@/lib/plan";
 import { alert, monitoringCapability } from "@/lib/schema";
 import { requireApiAuth, requireApiPermission } from "@/lib/session";
+
+const PAGE_SIZE = 20;
 
 export async function GET(request: Request) {
   const { session, error } = await requireApiAuth();
@@ -10,19 +13,21 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
+  const limit = Math.min(parseInt(searchParams.get("limit") ?? String(PAGE_SIZE), 10), 100);
+  const offset = parseInt(searchParams.get("offset") ?? "0", 10);
 
   const conditions = [eq(alert.organizationId, orgScope(session))];
   if (status) {
     conditions.push(eq(alert.status, status));
   }
 
-  const alerts = await db
-    .select()
-    .from(alert)
-    .where(and(...conditions))
-    .orderBy(alert.createdAt);
+  const [alerts, totalRows] = await Promise.all([
+    db.select().from(alert).where(and(...conditions)).orderBy(alert.createdAt).limit(limit).offset(offset),
+    db.select({ total: count() }).from(alert).where(and(...conditions)),
+  ]);
 
-  return Response.json({ alerts });
+  const total = Number(totalRows[0]?.total ?? 0);
+  return Response.json({ alerts, total, hasMore: offset + limit < total });
 }
 
 const VALID_SEVERITIES = ["critical", "warning", "info"];
@@ -76,6 +81,17 @@ export async function POST(request: Request) {
     );
   }
 
+  // Enforce plan limits
+  const orgId = orgScope(session);
+  const orgPlan = await getOrgPlan(orgId);
+  const alertLimit = PLAN_LIMITS[orgPlan].alerts;
+  if (isFinite(alertLimit)) {
+    const [row] = await db.select({ total: count() }).from(alert).where(eq(alert.organizationId, orgId));
+    if (Number(row?.total ?? 0) >= alertLimit) {
+      return Response.json({ error: "limit_reached", resource: "alerts", plan: orgPlan, limit: alertLimit }, { status: 403 });
+    }
+  }
+
   // Find the capability
   const [capability] = await db
     .select()
@@ -93,7 +109,7 @@ export async function POST(request: Request) {
       .from(alert)
       .where(
         and(
-          eq(alert.organizationId, orgScope(session)),
+          eq(alert.organizationId, orgId),
           eq(alert.capabilityId, capability.id),
           eq(alert.machine, machine.trim())
         )
@@ -128,7 +144,7 @@ export async function POST(request: Request) {
   const [created] = await db
     .insert(alert)
     .values({
-      organizationId: orgScope(session),
+      organizationId: orgId,
       name: alertName,
       description: alertDescription,
       capabilityId: capability.id,

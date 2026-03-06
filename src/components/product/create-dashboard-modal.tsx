@@ -44,6 +44,18 @@ export function CreateDashboardModal({
         }),
       });
 
+      if (res.status === 403) {
+        const data = await res.json();
+        if (data.error === "limit_reached") {
+          toast.error("Dashboard limit reached", {
+            description: `You've reached the ${data.limit}-dashboard limit on the Free plan.`,
+            action: { label: "Upgrade", onClick: () => window.location.href = "/pricing" },
+          });
+          setOpen(false);
+          return;
+        }
+      }
+
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error ?? "Failed to create dashboard");

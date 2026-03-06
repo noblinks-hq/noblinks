@@ -9,6 +9,7 @@ import {
   type SlideshowConfig,
 } from "@/components/product/slideshow-config-modal";
 import { SlideshowView } from "@/components/product/slideshow-view";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Dashboard, DashboardCategory } from "@/lib/types";
@@ -22,9 +23,13 @@ const categories: { label: string; value: DashboardCategory | "all" }[] = [
   { label: "Custom", value: "custom" },
 ];
 
+const PAGE_SIZE = 20;
+
 export default function DashboardsPage() {
   const [dashboards, setDashboards] = useState<Dashboard[]>([]);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<
     DashboardCategory | "all"
@@ -34,15 +39,30 @@ export default function DashboardsPage() {
 
   const fetchDashboards = useCallback(async () => {
     try {
-      const res = await fetch("/api/dashboards");
+      const res = await fetch(`/api/dashboards?limit=${PAGE_SIZE}&offset=0`);
       if (res.ok) {
-        const data = await res.json();
-        setDashboards(data);
+        const data = await res.json() as { dashboards: Dashboard[]; hasMore: boolean };
+        setDashboards(data.dashboards);
+        setHasMore(data.hasMore);
       }
     } finally {
       setLoading(false);
     }
   }, []);
+
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      const res = await fetch(`/api/dashboards?limit=${PAGE_SIZE}&offset=${dashboards.length}`);
+      if (res.ok) {
+        const data = await res.json() as { dashboards: Dashboard[]; hasMore: boolean };
+        setDashboards((prev) => [...prev, ...data.dashboards]);
+        setHasMore(data.hasMore);
+      }
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   useEffect(() => {
     fetchDashboards();
@@ -131,15 +151,24 @@ export default function DashboardsPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((dashboard) => (
-              <DashboardCard
-                key={dashboard.id}
-                dashboard={dashboard}
-                onUpdated={fetchDashboards}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {filtered.map((dashboard) => (
+                <DashboardCard
+                  key={dashboard.id}
+                  dashboard={dashboard}
+                  onUpdated={fetchDashboards}
+                />
+              ))}
+            </div>
+            {hasMore && (
+              <div className="flex justify-center pt-2">
+                <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
+                  {loadingMore ? "Loading..." : "Show more"}
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
 

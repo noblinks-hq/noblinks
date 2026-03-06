@@ -78,6 +78,27 @@
       "when": 1772755270604,
       "tag": "0010_violet_darwin",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1772802120803,
+      "tag": "0011_closed_red_shift",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1772802537659,
+      "tag": "0012_plain_ghost_rider",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1772803730681,
+      "tag": "0013_breezy_maggott",
+      "breakpoints": true
     }
   ]
 }

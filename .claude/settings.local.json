@@ -45,7 +45,9 @@
       "Bash(DATABASE_URL=\"postgresql://neondb_owner:npg_o06dADsRLQPZ@ep-steep-sea-agc8ylj1.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require\" npx drizzle-kit:*)",
       "Bash(POSTGRES_URL=\"postgresql://neondb_owner:npg_o06dADsRLQPZ@ep-steep-sea-agc8ylj1.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require\" npm run:*)",
       "Bash(npx tsx:*)",
-      "Bash(POSTGRES_URL=\"postgresql://neondb_owner:npg_o06dADsRLQPZ@ep-steep-sea-agc8ylj1-pooler.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require\" npx tsx:*)"
+      "Bash(POSTGRES_URL=\"postgresql://neondb_owner:npg_o06dADsRLQPZ@ep-steep-sea-agc8ylj1-pooler.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require\" npx tsx:*)",
+      "Bash(head:*)",
+      "Bash(pnpm add:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

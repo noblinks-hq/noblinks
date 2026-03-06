@@ -8,6 +8,7 @@ export interface Dashboard {
   organizationId: string;
   createdBy: string;
   visualizationCount: number;
+  publicToken: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -110,6 +111,10 @@ export interface DbAlert {
   severity: AlertSeverity;
   promqlQuery: string;
   status: DbAlertStatus;
+  notifyOnFire: boolean;
+  notifyOnResolve: boolean;
+  firedAt: string | null;
+  resolvedAt: string | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -133,6 +138,7 @@ export interface DbMachine {
   category: MachineType | null;
   environmentId: string | null;
   status: string;
+  needsUpdate: boolean;
   lastSeen: string | null;
   createdAt: string;
   updatedAt: string;

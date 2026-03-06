@@ -4,12 +4,16 @@ import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ChevronRight,
+  Activity,
+  AlertTriangle,
   Bot,
-  Code,
-  Server,
-  Gauge,
+  CheckCircle2,
+  ChevronRight,
   Clock,
+  Code,
+  Gauge,
+  PlayCircle,
+  Server,
   ShieldAlert,
   Trash2,
 } from "lucide-react";
@@ -32,6 +36,12 @@ interface AlertDetail {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+}
+
+interface AlertEventRow {
+  id: string;
+  event: string;
+  occurredAt: string;
 }
 
 interface CapabilityDetail {
@@ -60,12 +70,25 @@ export default function AlertDetailPage({
   const router = useRouter();
   const [alert, setAlert] = useState<AlertDetail | null>(null);
   const [capability, setCapability] = useState<CapabilityDetail | null>(null);
+  const [events, setEvents] = useState<AlertEventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [testLoading, setTestLoading] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    currentValue: number | null;
+    threshold: number;
+    wouldFire: boolean | null;
+    sampledAt: string | null;
+    stale?: boolean;
+    error?: string;
+  } | null>(null);
 
   const fetchAlert = useCallback(async () => {
     try {
-      const res = await fetch(`/api/alerts/${id}`);
+      const [res, eventsRes] = await Promise.all([
+        fetch(`/api/alerts/${id}`),
+        fetch(`/api/alerts/${id}/events`),
+      ]);
       if (!res.ok) {
         setNotFound(true);
         return;
@@ -73,6 +96,10 @@ export default function AlertDetailPage({
       const data = await res.json();
       setAlert(data.alert);
       setCapability(data.capability);
+      if (eventsRes.ok) {
+        const evData = await eventsRes.json();
+        setEvents(evData.events ?? []);
+      }
     } catch {
       setNotFound(true);
     } finally {
@@ -100,6 +127,20 @@ export default function AlertDetailPage({
     const res = await fetch(`/api/alerts/${id}`, { method: "DELETE" });
     if (res.ok) {
       router.push("/alerts");
+    }
+  }
+
+  async function handleTest() {
+    setTestLoading(true);
+    setTestResult(null);
+    try {
+      const res = await fetch(`/api/alerts/${id}/test`, { method: "POST" });
+      const data = await res.json();
+      setTestResult(data);
+    } catch {
+      setTestResult({ currentValue: null, threshold: 0, wouldFire: null, sampledAt: null, error: "Request failed" });
+    } finally {
+      setTestLoading(false);
     }
   }
 
@@ -158,6 +199,10 @@ export default function AlertDetailPage({
             Open Noblinks AI
           </Link>
         </Button>
+        <Button variant="outline" onClick={handleTest} disabled={testLoading}>
+          <PlayCircle className="mr-2 h-4 w-4" />
+          {testLoading ? "Testing…" : "Test Alert"}
+        </Button>
         {alert.status === "configured" && (
           <Button onClick={() => handleStatusChange("active")}>
             Activate
@@ -181,6 +226,54 @@ export default function AlertDetailPage({
           Delete
         </Button>
       </div>
+
+      {/* Test Result */}
+      {testResult && (
+        <div className={`rounded-lg border p-5 ${testResult.error ? "border-yellow-500/50 bg-yellow-500/5" : testResult.wouldFire ? "border-red-500/50 bg-red-500/5" : "border-green-500/50 bg-green-500/5"}`}>
+          <div className="mb-3 flex items-center gap-2">
+            {testResult.error ? (
+              <AlertTriangle className="h-4 w-4 text-yellow-500" />
+            ) : testResult.wouldFire ? (
+              <AlertTriangle className="h-4 w-4 text-red-500" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            )}
+            <h3 className="font-semibold">Test Result</h3>
+            {testResult.stale && (
+              <span className="text-xs text-muted-foreground">(data may be stale)</span>
+            )}
+          </div>
+          {testResult.error ? (
+            <p className="text-sm text-muted-foreground">{testResult.error}</p>
+          ) : (
+            <div className="flex flex-wrap gap-6">
+              <div>
+                <p className="text-xs text-muted-foreground">Current Value</p>
+                <p className="text-2xl font-bold tabular-nums">
+                  {testResult.currentValue !== null ? testResult.currentValue.toFixed(1) : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Threshold</p>
+                <p className="text-2xl font-bold tabular-nums">{testResult.threshold}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Would Fire</p>
+                <p className={`text-2xl font-bold ${testResult.wouldFire ? "text-red-500" : "text-green-500"}`}>
+                  {testResult.wouldFire ? "Yes" : "No"}
+                </p>
+              </div>
+              {testResult.sampledAt && (
+                <div className="self-end">
+                  <p className="text-xs text-muted-foreground" suppressHydrationWarning>
+                    Sampled {new Date(testResult.sampledAt).toLocaleString()}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Details Grid */}
       <div className="rounded-lg border p-5">
@@ -237,6 +330,34 @@ export default function AlertDetailPage({
           <code>{alert.promqlQuery}</code>
         </pre>
       </div>
+
+      {/* Event Timeline */}
+      {events.length > 0 && (
+        <div className="rounded-lg border p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <Activity className="h-4 w-4 text-muted-foreground" />
+            <h3 className="font-semibold">Incident History</h3>
+          </div>
+          <div className="relative space-y-3 pl-4">
+            <div className="absolute left-0 top-1.5 bottom-1.5 w-px bg-border" />
+            {events.map((ev) => (
+              <div key={ev.id} className="relative flex items-start gap-3">
+                <span
+                  className={`absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-background ${
+                    ev.event === "fired" ? "bg-red-500" : "bg-green-500"
+                  }`}
+                />
+                <div className="min-w-0 flex-1 pl-3">
+                  <p className="text-sm font-medium capitalize">{ev.event}</p>
+                  <p className="text-xs text-muted-foreground" suppressHydrationWarning>
+                    {new Date(ev.occurredAt).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Metadata */}
       <div className="text-xs text-muted-foreground" suppressHydrationWarning>
