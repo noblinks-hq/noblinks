@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getAIModel, isAIConfigured } from "@/lib/ai";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { generateCapability, saveGeneratedCapability } from "@/lib/generate-capability";
 import { monitoringCapability } from "@/lib/schema";
 
 const requestSchema = z.object({
@@ -110,13 +111,6 @@ export async function POST(req: Request) {
   // Fetch all capabilities from DB
   const capabilities = await db.select().from(monitoringCapability);
 
-  if (capabilities.length === 0) {
-    return Response.json(
-      { error: "No monitoring capabilities configured" },
-      { status: 500 }
-    );
-  }
-
   // Call AI to parse user intent into structured alert config
   let result;
   try {
@@ -177,37 +171,71 @@ export async function POST(req: Request) {
     category: c.category,
   }));
 
-  // Handle no match
-  if (!aiResult.matched) {
+  // ── No match from existing capabilities → generate a new one ────────────────
+  if (!aiResult.matched || !aiResult.capabilityKey || !aiResult.params) {
+    const generated = await generateCapability(prompt);
+
+    if (!generated || !generated.machine) {
+      return Response.json({
+        matched: false,
+        errorType: "no_match",
+        noMatchReason:
+          aiResult.noMatchReason ||
+          "Could not match your request to any capability and could not generate a new one.",
+        availableCapabilities,
+      });
+    }
+
+    const saved = await saveGeneratedCapability(generated);
+
     return Response.json({
-      matched: false,
-      errorType: "no_match",
-      noMatchReason: aiResult.noMatchReason || "Could not match your request to any available monitoring capability.",
-      availableCapabilities,
+      matched: true,
+      capabilityKey: saved.capabilityKey,
+      capabilityName: saved.name,
+      alertTemplate: saved.alertTemplate,
+      params: {
+        machine: generated.machine,
+        threshold: saved.defaultThreshold,
+        window: saved.defaultWindow,
+      },
+      severity: saved.suggestedSeverity,
+      alertName: `${saved.name} — ${generated.machine}`,
+      description: saved.description,
+      generated: true,
     });
   }
 
-  // Validate the AI-selected capability actually exists
-  if (!aiResult.capabilityKey || !aiResult.params) {
-    return Response.json({
-      matched: false,
-      errorType: "incomplete",
-      noMatchReason: "AI could not fully interpret your request. Try rephrasing with a specific metric, machine name, and threshold.",
-      availableCapabilities,
-    });
-  }
-
+  // ── Matched existing capability ───────────────────────────────────────────
   const [capability] = await db
     .select()
     .from(monitoringCapability)
     .where(eq(monitoringCapability.capabilityKey, aiResult.capabilityKey));
 
   if (!capability) {
+    const generated = await generateCapability(prompt);
+    if (!generated || !generated.machine) {
+      return Response.json({
+        matched: false,
+        errorType: "no_match",
+        noMatchReason: "Could not resolve the requested capability.",
+        availableCapabilities,
+      });
+    }
+    const saved = await saveGeneratedCapability(generated);
     return Response.json({
-      matched: false,
-      errorType: "invalid_capability",
-      noMatchReason: `AI matched "${aiResult.capabilityKey}" which is not a valid capability. Try rephrasing your request.`,
-      availableCapabilities,
+      matched: true,
+      capabilityKey: saved.capabilityKey,
+      capabilityName: saved.name,
+      alertTemplate: saved.alertTemplate,
+      params: {
+        machine: generated.machine,
+        threshold: saved.defaultThreshold,
+        window: saved.defaultWindow,
+      },
+      severity: saved.suggestedSeverity,
+      alertName: `${saved.name} — ${generated.machine}`,
+      description: saved.description,
+      generated: true,
     });
   }
 

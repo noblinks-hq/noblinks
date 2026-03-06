@@ -5,32 +5,44 @@ import { z } from "zod";
 import { getAIModel, isAIConfigured } from "@/lib/ai";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { generateCapability, saveGeneratedCapability } from "@/lib/generate-capability";
 import { monitoringCapability } from "@/lib/schema";
 
 const requestSchema = z.object({
   prompt: z.string().min(1, "Prompt is required").max(2000, "Prompt too long"),
+  machineName: z.string().optional(),
 });
 
 const aiWidgetSchema = z.object({
   matched: z.boolean().describe("Whether a matching capability was found"),
+  isVague: z
+    .boolean()
+    .describe(
+      "True when the request is too vague or ambiguous to act on — e.g. 'show me server health', 'monitor everything', 'is it running'. False when the intent is clear even if no capability matches."
+    ),
+  clarificationQuestion: z
+    .string()
+    .nullable()
+    .describe(
+      "A single, friendly question to ask the user to clarify their vague request. Only set when isVague is true. Example: 'Which aspect of server health would you like to monitor?'"
+    ),
+  suggestions: z
+    .array(z.string())
+    .describe(
+      "3–5 concrete example prompts the user could try. Always provide these. When isVague is true make them relevant to the vague request; otherwise leave as general examples."
+    ),
   capabilityKey: z
     .string()
     .nullable()
-    .describe(
-      "The matching capability key from the list, or null if not matched"
-    ),
+    .describe("The matching capability key from the list, or null if not matched"),
   widgetTitle: z
     .string()
     .nullable()
-    .describe(
-      "Human-readable widget title like 'CPU Usage — web-server-1', or null if not matched"
-    ),
+    .describe("Human-readable widget title like 'CPU Usage — web-server-1', or null if not matched"),
   widgetType: z
     .enum(["timeseries", "stat", "bar", "pie", "toplist"])
     .nullable()
-    .describe(
-      "Widget visualization type based on the metric nature"
-    ),
+    .describe("Widget visualization type based on the metric nature"),
   machine: z
     .string()
     .nullable()
@@ -38,15 +50,11 @@ const aiWidgetSchema = z.object({
   metric: z
     .string()
     .nullable()
-    .describe(
-      "The metric expression from the matched capability, or null if not matched"
-    ),
+    .describe("The metric expression from the matched capability, or null if not matched"),
   noMatchReason: z
     .string()
     .nullable()
-    .describe(
-      "Explanation of why no capability matched (if matched is false), or null if matched"
-    ),
+    .describe("Explanation of why no capability matched (if matched is false and not vague), or null"),
 });
 
 function buildSystemPrompt(
@@ -88,7 +96,10 @@ RULES:
    - "toplist": ranked list of top N values — top processes by CPU, top endpoints by latency.
 5. Use the capability's metric field as the base metric expression, substituting the machine name where appropriate.
 6. If the user's request doesn't match ANY capability, set matched to false and explain why in noMatchReason.
-7. The machine parameter is the target server/instance name mentioned by the user.`;
+7. The machine parameter is the target server/instance name mentioned by the user.
+8. SERVICE STATUS: If the user asks "is X running", "is X service up", or any variant about whether a Linux service/daemon is active, you MUST set matched=false UNLESS the capability list contains a capability whose metric includes "node_systemd_unit_state". NEVER match a service status query to process_open_fds, node_procs_running, or any unrelated metric.
+9. VAGUE REQUESTS: Set isVague=true when the request lacks a specific metric — e.g. "server health", "monitor everything", "is it ok", "show me stats", "how is the server doing". Set a helpful clarificationQuestion and relevant suggestions. Do NOT set isVague=true for specific requests that just happen to not match a capability.
+10. Always populate suggestions with 3–5 concrete prompts regardless of whether the request matched or was vague.`;
 }
 
 export async function POST(req: Request) {
@@ -115,7 +126,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const { prompt } = parsed.data;
+  const { prompt, machineName } = parsed.data;
 
   if (!isAIConfigured()) {
     return Response.json(
@@ -126,13 +137,6 @@ export async function POST(req: Request) {
 
   // Fetch all capabilities from DB
   const capabilities = await db.select().from(monitoringCapability);
-
-  if (capabilities.length === 0) {
-    return Response.json(
-      { error: "No monitoring capabilities configured" },
-      { status: 500 }
-    );
-  }
 
   // Call AI to parse user intent into structured widget config
   let result;
@@ -203,47 +207,84 @@ export async function POST(req: Request) {
   }
 
   const aiResult = result.object;
-  const availableCapabilities = capabilities.map((c) => ({
-    key: c.capabilityKey,
-    name: c.name,
-    description: c.description,
-    category: c.category,
-  }));
 
-  // Handle no match
-  if (!aiResult.matched) {
+  const orgId = session.session.activeOrganizationId ?? "";
+  const resolvedMachine = machineName ?? aiResult.machine ?? null;
+  const machineCtx =
+    orgId && resolvedMachine
+      ? { orgId, machineName: resolvedMachine }
+      : null;
+
+  // ── Vague request — ask for clarification ────────────────────────────────────
+  if (aiResult.isVague) {
     return Response.json({
       matched: false,
-      errorType: "no_match",
-      noMatchReason:
-        aiResult.noMatchReason ||
-        "Could not match your request to any available monitoring capability.",
-      availableCapabilities,
+      errorType: "vague",
+      clarificationQuestion: aiResult.clarificationQuestion,
+      suggestions: aiResult.suggestions,
     });
   }
 
-  // Validate the AI-selected capability actually exists
-  if (!aiResult.capabilityKey || !aiResult.machine || !aiResult.widgetType) {
+  // ── No match from existing capabilities → generate a new one ────────────────
+  if (!aiResult.matched || !aiResult.capabilityKey || !aiResult.machine || !aiResult.widgetType) {
+    const generated = await generateCapability(prompt, machineCtx);
+
+    if (!generated) {
+      return Response.json({
+        matched: false,
+        errorType: "no_match",
+        noMatchReason: machineCtx
+          ? `The agent on ${machineCtx.machineName} is offline or didn't respond in time. The AI needs to query the machine to determine the correct service name — please ensure the noblinks agent is running and try again.`
+          : aiResult.noMatchReason || "Could not match your request to any capability and could not generate a new one.",
+      });
+    }
+
+    const saved = await saveGeneratedCapability(generated);
+
     return Response.json({
-      matched: false,
-      errorType: "incomplete",
-      noMatchReason:
-        "AI could not fully interpret your request. Try rephrasing with a specific metric and machine name.",
-      availableCapabilities,
+      matched: true,
+      capabilityKey: saved.capabilityKey,
+      capabilityName: saved.name,
+      widgetTitle: generated.widgetTitle || `${saved.name} — ${generated.machine ?? "machine"}`,
+      widgetType: generated.widgetType,
+      machine: generated.machine,
+      metric: saved.metric,
+      generated: true,
+      generatedDescription: saved.description,
+      generatedScrapeQuery: saved.scrapeQuery,
     });
   }
 
+  // ── Matched existing capability ───────────────────────────────────────────
   const [capability] = await db
     .select()
     .from(monitoringCapability)
     .where(eq(monitoringCapability.capabilityKey, aiResult.capabilityKey));
 
   if (!capability) {
+    // Key returned by AI doesn't exist — generate instead
+    const generated = await generateCapability(prompt, machineCtx);
+    if (!generated) {
+      return Response.json({
+        matched: false,
+        errorType: "no_match",
+        noMatchReason: machineCtx
+          ? `The agent on ${machineCtx.machineName} is offline or didn't respond in time. The AI needs to query the machine to determine the correct service name — please ensure the noblinks agent is running and try again.`
+          : "Could not resolve the requested capability.",
+      });
+    }
+    const saved = await saveGeneratedCapability(generated);
     return Response.json({
-      matched: false,
-      errorType: "invalid_capability",
-      noMatchReason: `AI matched "${aiResult.capabilityKey}" which is not a valid capability. Try rephrasing your request.`,
-      availableCapabilities,
+      matched: true,
+      capabilityKey: saved.capabilityKey,
+      capabilityName: saved.name,
+      widgetTitle: generated.widgetTitle || `${saved.name} — ${generated.machine ?? "machine"}`,
+      widgetType: generated.widgetType,
+      machine: generated.machine,
+      metric: saved.metric,
+      generated: true,
+      generatedDescription: saved.description,
+      generatedScrapeQuery: saved.scrapeQuery,
     });
   }
 
@@ -251,8 +292,7 @@ export async function POST(req: Request) {
     matched: true,
     capabilityKey: aiResult.capabilityKey,
     capabilityName: capability.name,
-    widgetTitle:
-      aiResult.widgetTitle || `${capability.name} — ${aiResult.machine}`,
+    widgetTitle: aiResult.widgetTitle || `${capability.name} — ${aiResult.machine}`,
     widgetType: aiResult.widgetType,
     machine: aiResult.machine,
     metric: aiResult.metric || capability.metric,

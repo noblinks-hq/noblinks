@@ -10,6 +10,7 @@ import {
   Gauge,
   PieChart,
   Sparkles,
+  Wand2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,15 +43,14 @@ interface AiWidgetResult {
   metric?: string;
   errorType?: string;
   noMatchReason?: string;
-  availableCapabilities?: {
-    key: string;
-    name: string;
-    description: string;
-    category: string;
-  }[];
+  clarificationQuestion?: string;
+  suggestions?: string[];
+  generated?: boolean;
+  generatedDescription?: string;
+  generatedScrapeQuery?: string;
 }
 
-type Step = "input" | "analyzing" | "review" | "creating" | "success" | "error";
+type Step = "input" | "analyzing" | "clarify" | "review-generated" | "review" | "creating" | "success" | "error";
 type ErrorKind = "api" | "no_match";
 
 const WIDGET_TYPE_OPTIONS: WidgetType[] = ["timeseries", "stat", "bar", "pie", "toplist"];
@@ -123,7 +123,10 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
       const res = await fetch("/api/chat/create-widget", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: fullPrompt }),
+        body: JSON.stringify({
+          prompt: fullPrompt,
+          machineName: selectedMachine || undefined,
+        }),
       });
 
       if (!res.ok) {
@@ -142,7 +145,9 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
         setEditTitle(data.widgetTitle);
         setEditMachine(selectedMachine || data.machine);
         setEditType(data.widgetType);
-        setStep("review");
+        setStep(data.generated ? "review-generated" : "review");
+      } else if (data.errorType === "vague") {
+        setStep("clarify");
       } else {
         setErrorKind("no_match");
         setErrorMessage(
@@ -279,10 +284,130 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
             <div className="text-center">
               <p className="font-medium">Analyzing your request...</p>
               <p className="text-sm text-muted-foreground">
-                Matching to available monitoring capabilities
+                Querying your machine and matching to capabilities
               </p>
             </div>
           </div>
+        )}
+
+        {/* Step: Clarify */}
+        {step === "clarify" && (
+          <>
+            <DialogHeader>
+              <DialogTitle>Can you be more specific?</DialogTitle>
+              <DialogDescription>
+                {aiResult?.clarificationQuestion ?? "Your request is a bit vague — try one of the suggestions below or rewrite it."}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {aiResult?.suggestions && aiResult.suggestions.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Suggestions</p>
+                  <div className="flex flex-col gap-2">
+                    {aiResult.suggestions.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => {
+                          setPrompt(s);
+                          setStep("input");
+                        }}
+                        className="rounded-md border bg-muted/50 px-3 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-muted hover:border-foreground/30"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Or rewrite your prompt</p>
+                <Textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  rows={2}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleAnalyze();
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button onClick={handleAnalyze} disabled={!prompt.trim()}>
+                <Sparkles className="mr-2 h-4 w-4" />
+                Analyze
+              </Button>
+              <Button variant="ghost" onClick={handleReset}>Cancel</Button>
+            </DialogFooter>
+          </>
+        )}
+
+        {/* Step: Review Generated Capability */}
+        {step === "review-generated" && aiResult?.matched && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Wand2 className="h-5 w-5 text-amber-500" />
+                New Capability Generated
+              </DialogTitle>
+              <DialogDescription>
+                No existing capability matched your request, so the AI created one.
+                Review the details and query below before adding to your dashboard.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              {/* Capability name + description */}
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Wand2 className="h-4 w-4 text-amber-500 shrink-0" />
+                  <p className="text-sm font-semibold">{aiResult.capabilityName}</p>
+                </div>
+                {aiResult.generatedDescription && (
+                  <p className="text-sm text-muted-foreground">{aiResult.generatedDescription}</p>
+                )}
+              </div>
+
+              {/* Scrape query */}
+              {aiResult.generatedScrapeQuery && (
+                <div className="space-y-1.5">
+                  <p className="text-sm font-medium">Prometheus Query</p>
+                  <p className="text-xs text-muted-foreground">
+                    This PromQL expression will be evaluated every 30s on your machine.
+                  </p>
+                  <code className="block rounded-md bg-muted px-3 py-2.5 text-xs leading-relaxed break-all whitespace-pre-wrap">
+                    {aiResult.generatedScrapeQuery}
+                  </code>
+                </div>
+              )}
+
+              {/* Widget preview */}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Widget title</p>
+                  <p className="font-medium">{editTitle}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Machine</p>
+                  <p className="font-medium">{editMachine}</p>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2">
+              <Button onClick={() => setStep("review")}>
+                <Check className="mr-2 h-4 w-4" />
+                Looks good, proceed
+              </Button>
+              <Button variant="ghost" onClick={handleReset}>
+                Cancel
+              </Button>
+            </DialogFooter>
+          </>
         )}
 
         {/* Step: Review */}
@@ -460,29 +585,6 @@ export function AddWidgetModal({ dashboardId, onCreated }: AddWidgetModalProps) 
                 <p className="text-sm text-muted-foreground">{errorMessage}</p>
               </div>
             </div>
-
-            {aiResult?.availableCapabilities &&
-              aiResult.availableCapabilities.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">
-                    Try describing a widget using one of these capabilities:
-                  </p>
-                  <div className="grid gap-2">
-                    {aiResult.availableCapabilities.map((cap) => (
-                      <div
-                        key={cap.key}
-                        className="rounded-md border bg-muted/50 px-3 py-2"
-                      >
-                        <p className="text-sm font-medium">{cap.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {cap.description}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
             <DialogFooter>
               <Button onClick={handleReset}>Try Again</Button>
               <Button variant="ghost" onClick={() => setOpen(false)}>

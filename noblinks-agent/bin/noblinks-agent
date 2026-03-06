@@ -23,6 +23,7 @@ PROMETHEUS_URL="http://localhost:9090"
 RULES_FILE="/etc/prometheus/rules/noblinks.yml"
 HEARTBEAT_INTERVAL=30
 SYNC_INTERVAL=60
+LAST_HEARTBEAT=0
 LAST_SYNC=0
 LAST_RULES_HASH=""
 
@@ -113,19 +114,97 @@ sync_rules() {
   fi
 }
 
+# Execute a PromQL query against local Prometheus and post the label values back.
+# Usage: execute_query <query_id> <promql>
+execute_query() {
+  local query_id="$1"
+  local promql="$2"
+
+  local prom_response status labels_json
+
+  prom_response=$(curl -sf \
+    --max-time 10 \
+    -G \
+    --data-urlencode "query=${promql}" \
+    "${PROMETHEUS_URL}/api/v1/query" \
+    || true)
+
+  if [[ -z "$prom_response" ]]; then
+    curl -sf --max-time 10 \
+      -X POST "${NOBLINKS_URL}/api/agent/query-result" \
+      -H "Authorization: Bearer ${AGENT_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d "{\"id\":\"${query_id}\",\"error\":\"Prometheus unreachable\"}" \
+      > /dev/null || true
+    return
+  fi
+
+  status=$(printf '%s' "$prom_response" | jq -r '.status' 2>/dev/null || echo "error")
+  if [[ "$status" != "success" ]]; then
+    curl -sf --max-time 10 \
+      -X POST "${NOBLINKS_URL}/api/agent/query-result" \
+      -H "Authorization: Bearer ${AGENT_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d "{\"id\":\"${query_id}\",\"error\":\"Query failed\"}" \
+      > /dev/null || true
+    return
+  fi
+
+  # Extract unique "name" label values from every result metric
+  labels_json=$(printf '%s' "$prom_response" \
+    | jq '[.data.result[].metric.name // empty] | unique' 2>/dev/null \
+    || echo "[]")
+
+  curl -sf --max-time 10 \
+    -X POST "${NOBLINKS_URL}/api/agent/query-result" \
+    -H "Authorization: Bearer ${AGENT_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "{\"id\":\"${query_id}\",\"result\":${labels_json}}" \
+    > /dev/null || true
+}
+
+# Poll for pending PromQL queries from the server and execute them.
+poll_pending_queries() {
+  local response num_queries i query_id promql
+
+  response=$(curl -sf \
+    --max-time 10 \
+    "${NOBLINKS_URL}/api/agent/pending-queries" \
+    -H "Authorization: Bearer ${AGENT_TOKEN}" \
+    || true)
+
+  [[ -z "$response" ]] && return
+
+  num_queries=$(printf '%s' "$response" | jq '.queries | length' 2>/dev/null || echo 0)
+  [[ "$num_queries" -eq 0 ]] && return
+
+  log "executing ${num_queries} pending query/queries"
+  for (( i=0; i<num_queries; i++ )); do
+    query_id=$(printf '%s' "$response" | jq -r ".queries[$i].id")
+    promql=$(printf '%s' "$response" | jq -r ".queries[$i].promql")
+    execute_query "$query_id" "$promql"
+  done
+}
+
 log "starting (machine=${MACHINE_NAME}, version=${AGENT_VERSION})"
 log "noblinks URL: ${NOBLINKS_URL}"
 
 # Initial heartbeat + sync immediately on start
 send_heartbeat
+LAST_HEARTBEAT=$(date +%s)
 sync_rules
-LAST_SYNC=$(date +%s)
+LAST_SYNC=$LAST_HEARTBEAT
 
 while true; do
-  sleep "$HEARTBEAT_INTERVAL"
-  send_heartbeat
+  sleep 5
+
+  poll_pending_queries
 
   NOW=$(date +%s)
+  if (( NOW - LAST_HEARTBEAT >= HEARTBEAT_INTERVAL )); then
+    send_heartbeat
+    LAST_HEARTBEAT=$NOW
+  fi
   if (( NOW - LAST_SYNC >= SYNC_INTERVAL )); then
     sync_rules
     LAST_SYNC=$NOW

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Activity, Gauge, X } from "lucide-react";
+import { X } from "lucide-react";
+import { WidgetChart } from "@/components/product/widget-chart";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Dashboard, DbWidget } from "@/lib/types";
@@ -193,41 +194,16 @@ export function SlideshowView({
                   key={w.id}
                   className={`flex flex-col rounded-xl border-2 ${borderColor} bg-muted/20 p-6`}
                 >
-                  <div className="mb-4 flex items-start justify-between gap-2">
+                  <div className="mb-3 flex items-start justify-between gap-2">
                     <h2 className="text-lg font-semibold leading-tight">{w.title}</h2>
-                    <Badge variant="secondary" className="shrink-0 text-xs">
-                      {w.type === "timeseries" ? (
-                        <><Activity className="mr-1 h-3 w-3" />Time Series</>
-                      ) : (
-                        <><Gauge className="mr-1 h-3 w-3" />Stat</>
-                      )}
-                    </Badge>
+                    <Badge variant="secondary" className="shrink-0 text-xs">{w.type}</Badge>
                   </div>
                   <p className="mb-3 text-sm text-muted-foreground">
                     Machine: <span className="font-medium text-foreground">{w.machine}</span>
                   </p>
-                  {/* Simulated chart area */}
-                  <div className={`flex-1 rounded-lg bg-gradient-to-br ${gradient} flex items-end justify-around px-3 pb-3 pt-6 opacity-70`}>
-                    {w.type === "timeseries" ? (
-                      /* Fake bar chart */
-                      [40, 65, 55, 80, 60, 75, 50, 70, 85, 45, 72, 60].map((h, i) => (
-                        <div
-                          key={i}
-                          className="w-3 rounded-t bg-primary/60"
-                          style={{ height: `${h}%` }}
-                        />
-                      ))
-                    ) : (
-                      /* Fake stat */
-                      <div className="flex w-full flex-col items-center justify-center gap-1">
-                        <span className="text-4xl font-bold text-primary">72%</span>
-                        <span className="text-xs text-muted-foreground">current value</span>
-                      </div>
-                    )}
+                  <div className="flex-1">
+                    <WidgetChart widget={w} dashboardId={current.id} />
                   </div>
-                  <code className="mt-3 truncate rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
-                    {w.metric}
-                  </code>
                 </div>
               ))}
             </div>

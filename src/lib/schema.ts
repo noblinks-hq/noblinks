@@ -289,6 +289,25 @@ export const metricSample = pgTable(
   ]
 );
 
+export const agentQuery = pgTable(
+  "agent_query",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    machineName: text("machine_name").notNull(),
+    promql: text("promql").notNull(),
+    result: jsonb("result"), // string[] of label values once completed
+    status: text("status").notNull().default("pending"), // pending | completed | failed | timeout
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    completedAt: timestamp("completed_at"),
+  },
+  (table) => [
+    index("agent_query_machine_idx").on(table.organizationId, table.machineName, table.status),
+  ]
+);
+
 export const machine = pgTable(
   "machine",
   {

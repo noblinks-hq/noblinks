@@ -23,6 +23,7 @@ PROMETHEUS_URL="http://localhost:9090"
 RULES_FILE="/etc/prometheus/rules/noblinks.yml"
 HEARTBEAT_INTERVAL=30
 SYNC_INTERVAL=60
+LAST_HEARTBEAT=0
 LAST_SYNC=0
 LAST_RULES_HASH=""
 
@@ -218,23 +219,89 @@ sync_rules() {
   fi
 }
 
+poll_pending_queries() {
+  local response
+  response=$(curl -sf \
+    --max-time 10 \
+    "${NOBLINKS_URL}/api/agent/pending-queries" \
+    -H "Authorization: Bearer ${AGENT_TOKEN}" \
+    || true)
+
+  [[ -z "$response" ]] && return
+
+  python3 - "$response" "${NOBLINKS_URL}" "${AGENT_TOKEN}" "${PROMETHEUS_URL}" <<'PYEOF'
+import sys, json, urllib.request, urllib.parse, http.client
+
+raw, server_url, token, prom_url = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+
+try:
+    queries = json.loads(raw).get("queries", [])
+except Exception:
+    sys.exit(0)
+
+if not queries:
+    sys.exit(0)
+
+print(f"[pending-queries] executing {len(queries)} query/queries", flush=True)
+
+for q in queries:
+    qid   = q.get("id", "")
+    promql = q.get("promql", "")
+
+    result_payload = None
+    try:
+        url = prom_url + "/api/v1/query?query=" + urllib.parse.quote(promql)
+        with urllib.request.urlopen(url, timeout=10) as r:
+            data = json.load(r)
+        if data.get("status") != "success":
+            raise ValueError("prometheus returned non-success status")
+        labels = list({
+            m["metric"].get("name")
+            for m in data.get("data", {}).get("result", [])
+            if m.get("metric", {}).get("name")
+        })
+        result_payload = json.dumps({"id": qid, "result": labels})
+        print(f"[pending-queries] {qid[:8]} → {labels}", flush=True)
+    except Exception as e:
+        result_payload = json.dumps({"id": qid, "error": str(e)})
+        print(f"[pending-queries] {qid[:8]} failed: {e}", file=sys.stderr, flush=True)
+
+    try:
+        req = urllib.request.Request(
+            server_url + "/api/agent/query-result",
+            data=result_payload.encode(),
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=10)
+    except Exception as e:
+        print(f"[pending-queries] failed to post result: {e}", file=sys.stderr, flush=True)
+PYEOF
+}
+
 log "starting (machine=${MACHINE_NAME}, version=${AGENT_VERSION})"
 log "noblinks URL: ${NOBLINKS_URL}"
 
 # Run immediately on start
 send_heartbeat
+LAST_HEARTBEAT=$(date +%s)
 sync_metrics_config
 push_metrics || true
 sync_rules
-LAST_SYNC=$(date +%s)
-LAST_METRICS_SYNC=$(date +%s)
+LAST_SYNC=$LAST_HEARTBEAT
+LAST_METRICS_SYNC=$LAST_HEARTBEAT
 
 while true; do
-  sleep "$HEARTBEAT_INTERVAL"
-  send_heartbeat
-  push_metrics || true
+  sleep 5
+
+  poll_pending_queries
 
   NOW=$(date +%s)
+  if (( NOW - LAST_HEARTBEAT >= HEARTBEAT_INTERVAL )); then
+    send_heartbeat
+    push_metrics || true
+    LAST_HEARTBEAT=$NOW
+  fi
   if (( NOW - LAST_METRICS_SYNC >= METRICS_SYNC_INTERVAL )); then
     sync_metrics_config
     LAST_METRICS_SYNC=$NOW
