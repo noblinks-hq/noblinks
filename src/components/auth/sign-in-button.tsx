@@ -88,9 +88,7 @@ export function SignInButton() {
       </div>
       <div className="text-center text-sm text-muted-foreground">
         Don&apos;t have an account?{" "}
-        <Link href="/register" className="text-primary hover:underline">
-          Sign up
-        </Link>
+        <span className="text-muted-foreground/50 cursor-not-allowed">Sign up</span>
       </div>
     </form>
   )

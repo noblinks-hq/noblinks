@@ -1,9 +1,9 @@
   Then redeploy the agent on the machine:                                                                                                            
                                                                                                                                                      
-  curl -fsSL https://www.noblinks.com/noblinks-agent | sudo tee /usr/local/bin/noblinks-agent > /dev/null                                            
-  sudo chmod +x /usr/local/bin/noblinks-agent                                                                                                        
-  sudo systemctl restart noblinks-agent
-  sudo journalctl -u noblinks-agent -f
+    curl -fsSL https://www.noblinks.com/noblinks-agent | sudo tee /usr/local/bin/noblinks-agent > /dev/null                                            
+    sudo chmod +x /usr/local/bin/noblinks-agent                                                                                                        
+    sudo systemctl restart noblinks-agent
+    sudo journalctl -u noblinks-agent -f
 
 The corrected architecture:
 

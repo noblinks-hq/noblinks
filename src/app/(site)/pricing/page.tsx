@@ -15,7 +15,7 @@ const plans = [
     annual: { price: "$0", period: "forever", slug: null },
     description: "Get started with core monitoring for small setups.",
     cta: "Start for free",
-    ctaHref: "/register",
+    ctaHref: null,
     highlighted: false,
     features: [
       { text: "Up to 3 machines", included: true },
@@ -170,13 +170,21 @@ export default function PricingPage() {
                   variant={plan.highlighted ? "default" : "outline"}
                   className="w-full"
                 />
-              ) : (
+              ) : plan.ctaHref ? (
                 <Button
                   asChild
                   variant={plan.highlighted ? "default" : "outline"}
                   className="w-full"
                 >
-                  <Link href={plan.ctaHref!}>{plan.cta}</Link>
+                  <Link href={plan.ctaHref}>{plan.cta}</Link>
+                </Button>
+              ) : (
+                <Button
+                  disabled
+                  variant={plan.highlighted ? "default" : "outline"}
+                  className="w-full"
+                >
+                  {plan.cta}
                 </Button>
               )}
 

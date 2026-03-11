@@ -20,7 +20,7 @@ export function UserProfile() {
   const router = useRouter();
 
   if (isPending) {
-    return <div>Loading...</div>;
+    return <div className="h-8 w-8 rounded-full bg-muted animate-pulse" />;
   }
 
   if (!session) {
@@ -31,9 +31,7 @@ export function UserProfile() {
             Sign in
           </Button>
         </Link>
-        <Link href="/register">
-          <Button size="sm">Sign up</Button>
-        </Link>
+        <Button size="sm" disabled>Sign up</Button>
       </div>
     );
   }
