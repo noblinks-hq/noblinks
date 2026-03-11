@@ -136,7 +136,6 @@ export default function OverviewPage() {
     }
   }, []);
 
-  // Initial load + 30-second auto-refresh
   useEffect(() => {
     fetchData();
     const interval = setInterval(() => fetchData(true), 30_000);
@@ -150,159 +149,115 @@ export default function OverviewPage() {
     suggestions.length === 0;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8 py-4">
+    <div className="mx-auto max-w-4xl space-y-4 py-4">
       <PageHeader
         title="Overview"
         icon={LayoutDashboard}
         actions={
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => fetchData(true)}
-            disabled={refreshing}
-          >
-            <RefreshCw
-              className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-            />
+          <Button variant="ghost" size="sm" onClick={() => fetchData(true)} disabled={refreshing}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
             Refresh
           </Button>
         }
       />
 
-      {/* ----------------------------------------------------------------- */}
-      {/* 1. Firing Alerts                                                  */}
-      {/* ----------------------------------------------------------------- */}
-      {firingAlerts.length > 0 && (
-        <section>
-          <h2 className="text-lg font-semibold">Firing Alerts</h2>
-          <div className="mt-1 border-b" />
-          <div className="mt-4 space-y-3">
-            {firingAlerts.map((a) => (
-              <div
-                key={a.id}
-                className={`flex items-center gap-4 rounded-lg border border-l-4 px-5 py-4 transition-colors hover:bg-muted/50 ${SEVERITY_BORDER[a.severity] ?? "border-l-gray-400"}`}
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium">{a.name}</p>
-                  <p className="mt-0.5 text-sm text-muted-foreground">
-                    {a.machine}
-                  </p>
-                </div>
-                <Badge
-                  variant="secondary"
-                  className={`shrink-0 ${SEVERITY_BADGE[a.severity] ?? ""}`}
-                >
-                  {a.severity}
-                </Badge>
-                <span
-                  className="shrink-0 text-sm text-muted-foreground"
-                  suppressHydrationWarning
-                >
-                  {timeAgo(a.firedAt)}
-                </span>
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href={`/alerts/${a.id}`}>View</Link>
-                </Button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* ----------------------------------------------------------------- */}
-      {/* 3. Disconnected Machines                                          */}
-      {/* ----------------------------------------------------------------- */}
-      {offlineMachines.length > 0 && (
-        <section>
-          <h2 className="text-lg font-semibold">Disconnected Machines</h2>
-          <div className="mt-1 border-b" />
-          <div className="mt-4 space-y-3">
-            {offlineMachines.map((m) => (
-              <div
-                key={m.id}
-                className="flex items-center gap-4 rounded-lg border px-5 py-4 transition-colors hover:bg-muted/50"
-              >
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" />
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium">{m.name}</p>
-                  <p
-                    className="mt-0.5 text-sm text-muted-foreground"
-                    suppressHydrationWarning
-                  >
-                    {m.lastSeen
-                      ? `Last seen ${timeAgo(m.lastSeen)}`
-                      : "Never connected"}
-                    {m.hostname && ` \u00B7 ${m.hostname}`}
-                  </p>
-                </div>
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href={`/machines/${m.id}`}>View Machine</Link>
-                </Button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* ----------------------------------------------------------------- */}
-      {/* 5. AI Insights                                                    */}
-      {/* ----------------------------------------------------------------- */}
-      {suggestions.length > 0 && (
-        <section>
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-purple-500" />
-            <h2 className="text-lg font-semibold">AI Insights</h2>
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Based on metric trends from the last 24 hours
-          </p>
-          <div className="mt-4 space-y-3">
-            {suggestions.map((s, idx) => (
-              <div
-                key={`${s.machineName}-${s.metricKey}-${idx}`}
-                className={`relative rounded-lg border border-l-4 px-5 py-4 ${SEVERITY_BORDER[s.severity] ?? "border-l-gray-400"}`}
-              >
-                <div className="flex items-start gap-3">
-                  <Sparkles
-                    className={`mt-0.5 h-4 w-4 shrink-0 ${SEVERITY_ICON_COLOR[s.severity] ?? "text-muted-foreground"}`}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm leading-relaxed">{s.message}</p>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    <Badge
-                      variant="outline"
-                      className="text-xs"
-                    >
-                      {s.machineName}
-                    </Badge>
-                    <Badge
-                      variant="secondary"
-                      className={`text-xs ${SEVERITY_BADGE[s.severity] ?? ""}`}
-                    >
-                      {s.severity}
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* ----------------------------------------------------------------- */}
-      {/* 6. Empty state                                                    */}
-      {/* ----------------------------------------------------------------- */}
-      {allClear && (
+      {allClear ? (
         <div className="flex flex-col items-center justify-center py-32 text-center">
           <CheckCircle2 className="h-12 w-12 text-green-500" />
-          <h2 className="mt-6 text-2xl font-semibold">
-            All systems operational
-          </h2>
+          <h2 className="mt-6 text-2xl font-semibold">All systems operational</h2>
           <p className="mt-2 text-muted-foreground">
             No active alerts, offline machines, or anomalies detected.
           </p>
         </div>
+      ) : (
+        <>
+          {firingAlerts.length > 0 && (
+            <div className="rounded-xl border bg-card p-6 shadow-sm">
+              <h2 className="text-base font-semibold">Firing Alerts</h2>
+              <div className="mt-4 space-y-3">
+                {firingAlerts.map((a) => (
+                  <div
+                    key={a.id}
+                    className={`flex items-center gap-4 rounded-lg border border-l-4 px-5 py-4 transition-colors hover:bg-muted/50 ${SEVERITY_BORDER[a.severity] ?? "border-l-gray-400"}`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium">{a.name}</p>
+                      <p className="mt-0.5 text-sm text-muted-foreground">{a.machine}</p>
+                    </div>
+                    <Badge variant="secondary" className={`shrink-0 ${SEVERITY_BADGE[a.severity] ?? ""}`}>
+                      {a.severity}
+                    </Badge>
+                    <span className="shrink-0 text-sm text-muted-foreground" suppressHydrationWarning>
+                      {timeAgo(a.firedAt)}
+                    </span>
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href={`/alerts/${a.id}`}>View</Link>
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {offlineMachines.length > 0 && (
+            <div className="rounded-xl border bg-card p-6 shadow-sm">
+              <h2 className="text-base font-semibold">Disconnected Machines</h2>
+              <div className="mt-4 space-y-3">
+                {offlineMachines.map((m) => (
+                  <div
+                    key={m.id}
+                    className="flex items-center gap-4 rounded-lg border px-5 py-4 transition-colors hover:bg-muted/50"
+                  >
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium">{m.name}</p>
+                      <p className="mt-0.5 text-sm text-muted-foreground" suppressHydrationWarning>
+                        {m.lastSeen ? `Last seen ${timeAgo(m.lastSeen)}` : "Never connected"}
+                        {m.hostname && ` \u00B7 ${m.hostname}`}
+                      </p>
+                    </div>
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href={`/machines/${m.id}`}>View Machine</Link>
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {suggestions.length > 0 && (
+            <div className="rounded-xl border bg-card p-6 shadow-sm">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-purple-500" />
+                <h2 className="text-base font-semibold">AI Insights</h2>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Based on metric trends from the last 24 hours
+              </p>
+              <div className="mt-4 space-y-3">
+                {suggestions.map((s, idx) => (
+                  <div
+                    key={`${s.machineName}-${s.metricKey}-${idx}`}
+                    className={`rounded-lg border border-l-4 px-5 py-4 ${SEVERITY_BORDER[s.severity] ?? "border-l-gray-400"}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Sparkles className={`mt-0.5 h-4 w-4 shrink-0 ${SEVERITY_ICON_COLOR[s.severity] ?? "text-muted-foreground"}`} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm leading-relaxed">{s.message}</p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <Badge variant="outline" className="text-xs">{s.machineName}</Badge>
+                        <Badge variant="secondary" className={`text-xs ${SEVERITY_BADGE[s.severity] ?? ""}`}>
+                          {s.severity}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
