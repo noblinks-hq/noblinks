@@ -1,8 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { UserProfile } from "@/components/auth/user-profile";
-import { ModeToggle } from "@/components/ui/mode-toggle";
 import { NoblinksProvider } from "@/context/noblinks-context";
 import { Sidebar } from "./sidebar";
 
@@ -13,11 +11,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
         <Sidebar />
 
         <div className="flex flex-1 flex-col overflow-hidden">
-          {/* Top bar */}
-          <header className="flex h-14 items-center justify-end gap-4 border-b pl-14 pr-6 md:pl-6">
-            <UserProfile />
-            <ModeToggle />
-          </header>
+          {/* Top bar — mobile spacing only */}
+          <header className="flex h-14 items-center border-b pl-14 md:pl-6" />
 
           {/* Main content */}
           <main className="flex-1 overflow-y-auto p-6">{children}</main>
