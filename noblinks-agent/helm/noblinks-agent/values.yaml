@@ -1,0 +1,121 @@
+# -- Noblinks connection settings (required)
+noblinks:
+  # Registration token from Settings -> Agent Integration (required)
+  registrationToken: ""
+  # Human-readable name for this cluster
+  clusterName: ""
+  # Noblinks backend URL
+  url: "https://www.noblinks.com"
+
+# -- Agent image (uses curlimages/curl since the agent is a bash script)
+agent:
+  image:
+    repository: alpine
+    tag: "3.19"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# -- Prometheus settings
+# enabled: true  -> always deploy
+# enabled: false -> never deploy (must provide externalUrl)
+# enabled: auto  -> deploy only if no existing Prometheus is detected
+prometheus:
+  enabled: auto
+  # If set, skip deploying Prometheus and use this URL instead
+  externalUrl: ""
+  image:
+    repository: prom/prometheus
+    tag: "v2.53.1"
+    pullPolicy: IfNotPresent
+  retention: "15d"
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  # Extra scrape configs to add
+  extraScrapeConfigs: ""
+
+# -- Alertmanager settings
+# enabled: auto -> deploy only if no existing Alertmanager is detected
+alertmanager:
+  enabled: auto
+  externalUrl: ""
+  image:
+    repository: prom/alertmanager
+    tag: "v0.27.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# -- Node Exporter (DaemonSet -- runs on every node)
+nodeExporter:
+  enabled: true
+  image:
+    repository: prom/node-exporter
+    tag: "v1.8.2"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# -- kube-state-metrics (cluster-level metrics)
+kubeStateMetrics:
+  enabled: true
+  image:
+    repository: registry.k8s.io/kube-state-metrics/kube-state-metrics
+    tag: "v2.12.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# -- RBAC
+rbac:
+  create: true
+
+# -- Service account
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# -- Image pull secrets
+imagePullSecrets: []
+
+# -- Name overrides
+nameOverride: ""
+fullnameOverride: ""
+
+# -- Pod annotations
+podAnnotations: {}
+
+# -- Node selector
+nodeSelector: {}
+
+# -- Tolerations
+tolerations: []
+
+# -- Affinity
+affinity: {}

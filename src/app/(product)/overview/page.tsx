@@ -201,7 +201,7 @@ export default function OverviewPage() {
 
           {offlineMachines.length > 0 && (
             <div className="rounded-xl border bg-card p-6 shadow-sm">
-              <h2 className="text-base font-semibold">Disconnected Machines</h2>
+              <h2 className="text-base font-semibold">Disconnected Infrastructure</h2>
               <div className="mt-4 space-y-3">
                 {offlineMachines.map((m) => (
                   <div

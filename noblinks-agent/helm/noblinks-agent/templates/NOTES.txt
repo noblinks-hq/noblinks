@@ -1,0 +1,32 @@
+noblinks-agent has been deployed to your Kubernetes cluster!
+
+Cluster name: {{ .Values.noblinks.clusterName | default .Release.Name }}
+Namespace:    {{ .Release.Namespace }}
+
+Components deployed:
+  - noblinks-agent (Deployment)
+{{- if eq (include "noblinks-agent.deployPrometheus" .) "true" }}
+  - Prometheus (Deployment) -- fresh install
+{{- else }}
+  - Prometheus -- using existing instance at {{ include "noblinks-agent.prometheusUrl" . }}
+{{- end }}
+{{- if eq (include "noblinks-agent.deployAlertmanager" .) "true" }}
+  - Alertmanager (Deployment) -- fresh install
+{{- else }}
+  - Alertmanager -- using existing instance
+{{- end }}
+{{- if .Values.nodeExporter.enabled }}
+  - Node Exporter (DaemonSet)
+{{- end }}
+{{- if .Values.kubeStateMetrics.enabled }}
+  - kube-state-metrics (Deployment)
+{{- end }}
+
+Check agent status:
+  kubectl logs -n {{ .Release.Namespace }} deployment/{{ include "noblinks-agent.fullname" . }}-agent
+
+View your cluster in noblinks:
+  {{ .Values.noblinks.url }}/machines
+
+To uninstall:
+  helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}

@@ -17,6 +17,67 @@ warn()    { echo -e "${YELLOW}[noblinks]${NC} $*"; }
 error()   { echo -e "${RED}[noblinks] ERROR:${NC} $*" >&2; exit 1; }
 step()    { echo -e "\n${GREEN}──${NC} $*"; }
 
+# ── Permission prompt ─────────────────────────────────────────────────────────
+# Prints a bordered box with the component name and description, then asks the
+# user to confirm. In non-interactive mode (stdin is not a terminal, e.g. piped
+# from curl) the prompt is auto-approved.
+# Usage: ask_permission "component_name" "description"
+# Returns 0 (approved) or 1 (declined).
+ask_permission() {
+  local name="$1"
+  local desc="$2"
+
+  # Determine the box width based on content (minimum 50 chars inner width)
+  local inner_width=50
+  local name_len=${#name}
+  local desc_len=${#desc}
+  local max_len=$(( name_len > desc_len ? name_len : desc_len ))
+  if (( max_len + 4 > inner_width )); then
+    inner_width=$(( max_len + 4 ))
+  fi
+
+  # Build the horizontal border
+  local border=""
+  for (( i = 0; i < inner_width; i++ )); do
+    border="${border}─"
+  done
+
+  echo ""
+  echo -e "  ${GREEN}┌${border}┐${NC}"
+  # Print the component name, padded to fill the box
+  local pad=$(( inner_width - name_len ))
+  printf "  ${GREEN}│${NC}  ${YELLOW}%s${NC}%*s${GREEN}│${NC}\n" "$name" "$((pad - 2))" ""
+  # Print the description, wrapping manually if needed
+  # For simplicity, print the full description on one line with padding
+  local desc_pad=$(( inner_width - desc_len ))
+  if (( desc_pad < 2 )); then
+    desc_pad=2
+  fi
+  printf "  ${GREEN}│${NC}  %s%*s${GREEN}│${NC}\n" "$desc" "$((desc_pad - 2))" ""
+  echo -e "  ${GREEN}└${border}┘${NC}"
+
+  # Non-interactive mode: auto-approve (stdin is not a terminal)
+  if [[ ! -t 0 ]]; then
+    log "Non-interactive mode detected — auto-approving ${name}"
+    return 0
+  fi
+
+  # Interactive prompt
+  echo -n -e "  Install ${YELLOW}${name}${NC}? [y/N] "
+  local answer
+  read -r answer
+  case "${answer,,}" in
+    y|yes) return 0 ;;
+    *)     return 1 ;;
+  esac
+}
+
+# ── Installed check ──────────────────────────────────────────────────────────
+# Returns 0 if the binary at the given path exists, 1 otherwise.
+is_installed() {
+  [[ -f "$1" ]]
+}
+
 # ── Argument parsing ───────────────────────────────────────────────────────────
 REG_TOKEN=""
 MACHINE_NAME=""
@@ -82,7 +143,7 @@ case "$DISTRO_ID" in
     ;;
 esac
 
-# ── Dependency check ───────────────────────────────────────────────────────────
+# ── Dependency check ─────────────────────────────────────────────────────────
 step "Checking dependencies"
 MISSING_PKGS=()
 for cmd in curl tar jq sha256sum; do
@@ -90,9 +151,14 @@ for cmd in curl tar jq sha256sum; do
 done
 
 if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then
-  log "Installing missing packages: ${MISSING_PKGS[*]}"
-  $PKG_UPDATE
-  $PKG_INSTALL "${MISSING_PKGS[@]}"
+  log "Missing system packages: ${MISSING_PKGS[*]}"
+  if ask_permission "System packages (${MISSING_PKGS[*]})" \
+    "Small utilities needed by the installer: curl downloads binaries, tar extracts them, jq parses API responses, sha256sum verifies downloads."; then
+    $PKG_UPDATE
+    $PKG_INSTALL "${MISSING_PKGS[@]}"
+  else
+    error "System packages (${MISSING_PKGS[*]}) are required by the installer. Cannot continue without them."
+  fi
 fi
 
 # ── Helper: download + verify + extract ───────────────────────────────────────
@@ -120,14 +186,25 @@ create_user() {
 # ── 1. node_exporter ──────────────────────────────────────────────────────────
 step "Installing node_exporter ${NODE_EXPORTER_VERSION}"
 
-NE_URL="https://github.com/prometheus/node_exporter/releases/download/v${NODE_EXPORTER_VERSION}/node_exporter-${NODE_EXPORTER_VERSION}.linux-${ARCH_NE}.tar.gz"
-NE_TMP=$(mktemp -d)
-trap 'rm -rf "$NE_TMP"' EXIT
+NE_BIN="/usr/local/bin/node_exporter"
+if is_installed "$NE_BIN"; then
+  log "node_exporter already installed (${NE_BIN}) — skipping download"
+else
+  if ask_permission "node_exporter" \
+    "Collects system metrics (CPU, memory, disk, network) from this machine and exposes them on localhost:9100. Nothing is sent externally — Prometheus reads from it locally."; then
+    NE_URL="https://github.com/prometheus/node_exporter/releases/download/v${NODE_EXPORTER_VERSION}/node_exporter-${NODE_EXPORTER_VERSION}.linux-${ARCH_NE}.tar.gz"
+    NE_TMP=$(mktemp -d)
+    trap 'rm -rf "$NE_TMP"' EXIT
 
-curl -fsSL --progress-bar "$NE_URL" -o "$NE_TMP/ne.tar.gz"
-tar -xzf "$NE_TMP/ne.tar.gz" -C "$NE_TMP" --strip-components=1
-install -o root -g root -m 0755 "$NE_TMP/node_exporter" /usr/local/bin/node_exporter
+    curl -fsSL --progress-bar "$NE_URL" -o "$NE_TMP/ne.tar.gz"
+    tar -xzf "$NE_TMP/ne.tar.gz" -C "$NE_TMP" --strip-components=1
+    install -o root -g root -m 0755 "$NE_TMP/node_exporter" "$NE_BIN"
+  else
+    error "node_exporter is required for the noblinks monitoring stack. Cannot continue without it."
+  fi
+fi
 
+# Config and service files are always written to ensure correctness
 create_user node_exporter
 
 cat > /etc/systemd/system/node_exporter.service <<'EOF'
@@ -158,14 +235,25 @@ log "node_exporter started on port 9100"
 # ── 2. Prometheus ──────────────────────────────────────────────────────────────
 step "Installing Prometheus ${PROMETHEUS_VERSION}"
 
-PROM_URL="https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-${ARCH_PROM}.tar.gz"
-PROM_TMP=$(mktemp -d)
-curl -fsSL --progress-bar "$PROM_URL" -o "$PROM_TMP/prom.tar.gz"
-tar -xzf "$PROM_TMP/prom.tar.gz" -C "$PROM_TMP" --strip-components=1
-install -o root -g root -m 0755 "$PROM_TMP/prometheus"  /usr/local/bin/prometheus
-install -o root -g root -m 0755 "$PROM_TMP/promtool"    /usr/local/bin/promtool
-rm -rf "$PROM_TMP"
+PROM_BIN="/usr/local/bin/prometheus"
+if is_installed "$PROM_BIN"; then
+  log "Prometheus already installed (${PROM_BIN}) — skipping download"
+else
+  if ask_permission "Prometheus" \
+    "Time-series database that stores metrics from node_exporter. Evaluates alert rules and forwards firing alerts to Alertmanager. Runs on localhost:9090, not accessible from the network."; then
+    PROM_URL="https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-${ARCH_PROM}.tar.gz"
+    PROM_TMP=$(mktemp -d)
+    curl -fsSL --progress-bar "$PROM_URL" -o "$PROM_TMP/prom.tar.gz"
+    tar -xzf "$PROM_TMP/prom.tar.gz" -C "$PROM_TMP" --strip-components=1
+    install -o root -g root -m 0755 "$PROM_TMP/prometheus"  /usr/local/bin/prometheus
+    install -o root -g root -m 0755 "$PROM_TMP/promtool"    /usr/local/bin/promtool
+    rm -rf "$PROM_TMP"
+  else
+    error "Prometheus is required for the noblinks monitoring stack. Cannot continue without it."
+  fi
+fi
 
+# Config and service files are always written to ensure machine name and tokens are correct
 create_user prometheus
 mkdir -p /etc/prometheus/rules /var/lib/prometheus/data
 chown -R prometheus:prometheus /etc/prometheus /var/lib/prometheus
@@ -234,14 +322,25 @@ log "Prometheus started on port 9090 (localhost only)"
 # ── 3. Alertmanager (placeholder config — token filled in after registration) ──
 step "Installing Alertmanager ${ALERTMANAGER_VERSION}"
 
-AM_URL="https://github.com/prometheus/alertmanager/releases/download/v${ALERTMANAGER_VERSION}/alertmanager-${ALERTMANAGER_VERSION}.linux-${ARCH_PROM}.tar.gz"
-AM_TMP=$(mktemp -d)
-curl -fsSL --progress-bar "$AM_URL" -o "$AM_TMP/am.tar.gz"
-tar -xzf "$AM_TMP/am.tar.gz" -C "$AM_TMP" --strip-components=1
-install -o root -g root -m 0755 "$AM_TMP/alertmanager" /usr/local/bin/alertmanager
-install -o root -g root -m 0755 "$AM_TMP/amtool"       /usr/local/bin/amtool
-rm -rf "$AM_TMP"
+AM_BIN="/usr/local/bin/alertmanager"
+if is_installed "$AM_BIN"; then
+  log "Alertmanager already installed (${AM_BIN}) — skipping download"
+else
+  if ask_permission "Alertmanager" \
+    "Receives firing alerts from Prometheus and forwards them to the noblinks backend via a secure webhook. Runs on localhost:9093, not accessible from the network."; then
+    AM_URL="https://github.com/prometheus/alertmanager/releases/download/v${ALERTMANAGER_VERSION}/alertmanager-${ALERTMANAGER_VERSION}.linux-${ARCH_PROM}.tar.gz"
+    AM_TMP=$(mktemp -d)
+    curl -fsSL --progress-bar "$AM_URL" -o "$AM_TMP/am.tar.gz"
+    tar -xzf "$AM_TMP/am.tar.gz" -C "$AM_TMP" --strip-components=1
+    install -o root -g root -m 0755 "$AM_TMP/alertmanager" /usr/local/bin/alertmanager
+    install -o root -g root -m 0755 "$AM_TMP/amtool"       /usr/local/bin/amtool
+    rm -rf "$AM_TMP"
+  else
+    error "Alertmanager is required for the noblinks monitoring stack. Cannot continue without it."
+  fi
+fi
 
+# Config and service files are always written to ensure machine name and tokens are correct
 create_user alertmanager
 mkdir -p /etc/alertmanager /var/lib/alertmanager/data
 chown -R alertmanager:alertmanager /etc/alertmanager /var/lib/alertmanager
@@ -298,9 +397,20 @@ systemctl enable alertmanager
 # ── 4. noblinks-agent binary ───────────────────────────────────────────────────
 step "Installing noblinks-agent ${AGENT_VERSION}"
 
-curl -fsSL "${NOBLINKS_URL}/noblinks-agent" -o /usr/local/bin/noblinks-agent
-chmod 0755 /usr/local/bin/noblinks-agent
+AGENT_BIN="/usr/local/bin/noblinks-agent"
+if is_installed "$AGENT_BIN"; then
+  log "noblinks-agent already installed (${AGENT_BIN}) — skipping download"
+else
+  if ask_permission "noblinks-agent" \
+    "Lightweight daemon that syncs alert rules from noblinks, sends heartbeats every 30s, and executes metric queries on demand. Communicates only with ${NOBLINKS_URL}."; then
+    curl -fsSL "${NOBLINKS_URL}/noblinks-agent" -o "$AGENT_BIN"
+    chmod 0755 "$AGENT_BIN"
+  else
+    error "noblinks-agent is required for the noblinks monitoring stack. Cannot continue without it."
+  fi
+fi
 
+# Service file is always written to ensure correctness
 cat > /etc/systemd/system/noblinks-agent.service <<'EOF'
 [Unit]
 Description=Noblinks Agent

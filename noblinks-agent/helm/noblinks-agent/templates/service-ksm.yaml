@@ -1,0 +1,25 @@
+{{- if .Values.kubeStateMetrics.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "noblinks-agent.fullname" . }}-kube-state-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "noblinks-agent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: kube-state-metrics
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: 8080
+      targetPort: http-metrics
+      protocol: TCP
+      name: http-metrics
+    - port: 8081
+      targetPort: telemetry
+      protocol: TCP
+      name: telemetry
+  selector:
+    {{- include "noblinks-agent.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: kube-state-metrics
+{{- end }}

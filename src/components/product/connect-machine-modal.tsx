@@ -100,8 +100,17 @@ export function ConnectMachineModal({
     onConnected?.();
   }
 
+  const isKubernetes = machine.category === "kubernetes";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.noblinks.com";
+
+  const helmCommand = orgToken
+    ? `helm install noblinks-agent ${appUrl}/helm/noblinks-agent-0.1.0.tgz \\\n  --namespace noblinks \\\n  --create-namespace \\\n  --set noblinks.registrationToken=${orgToken} \\\n  --set noblinks.clusterName="${machine.name}"`
+    : "Loading...";
+
   const installCommand = orgToken
-    ? `curl -fsSL ${process.env.NEXT_PUBLIC_APP_URL ?? "https://www.noblinks.com"}/install.sh | sudo bash -s -- --token ${orgToken} --name "${machine.name}"`
+    ? isKubernetes
+      ? helmCommand
+      : `curl -fsSL ${appUrl}/install.sh | sudo bash -s -- --token ${orgToken} --name "${machine.name}"`
     : "Loading...";
 
   async function handleCopy() {
@@ -121,39 +130,59 @@ export function ConnectMachineModal({
         <DialogHeader>
           <DialogTitle>
             {step === "connected"
-              ? "Machine Connected"
+              ? "Infrastructure Connected"
               : `Connect ${machine.name}`}
           </DialogTitle>
           <DialogDescription>
-            {step === "install" &&
+            {step === "install" && isKubernetes &&
+              "Run the following Helm command to deploy the Noblinks agent into your Kubernetes cluster."}
+            {step === "install" && !isKubernetes &&
               "Run the following command on your machine to install the Noblinks agent."}
             {step === "waiting" &&
               "Waiting for the agent to connect..."}
             {step === "connected" &&
-              "Your machine is now connected and reporting."}
+              "Your infrastructure is now connected and reporting."}
           </DialogDescription>
         </DialogHeader>
 
         {step === "install" && (
           <div className="mt-4 space-y-4">
-            <div className="relative">
-              <pre className="whitespace-pre-wrap break-all rounded-lg bg-muted p-4 pr-12 text-xs leading-relaxed">
-                {installCommand}
-              </pre>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute right-2 top-2"
-                onClick={handleCopy}
-                disabled={!orgToken}
-              >
-                {copied ? (
-                  <Check className="h-4 w-4" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
+            {isKubernetes ? (
+              <>
+                <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300">
+                  Make sure <code className="font-mono font-semibold">helm</code> and <code className="font-mono font-semibold">kubectl</code> are installed and your context points to the target cluster.
+                </div>
+                <div className="relative">
+                  <pre className="whitespace-pre-wrap break-all rounded-lg bg-muted p-4 pr-12 text-xs leading-relaxed">
+                    {helmCommand}
+                  </pre>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-2 top-2"
+                    onClick={handleCopy}
+                    disabled={!orgToken}
+                  >
+                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div className="relative">
+                <pre className="whitespace-pre-wrap break-all rounded-lg bg-muted p-4 pr-12 text-xs leading-relaxed">
+                  {installCommand}
+                </pre>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-2 top-2"
+                  onClick={handleCopy}
+                  disabled={!orgToken}
+                >
+                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            )}
           </div>
         )}
 

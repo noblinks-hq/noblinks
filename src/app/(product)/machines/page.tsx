@@ -95,7 +95,7 @@ export default function MachinesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Machines"
+        title="Infrastructure"
         icon={Server}
         actions={<CreateEnvironmentModal onCreated={fetchData} />}
       />

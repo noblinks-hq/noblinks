@@ -73,7 +73,7 @@ export default function EnvironmentPage({
     <div className="space-y-6">
       <nav className="flex items-center gap-1 text-sm text-muted-foreground">
         <Link href="/machines" className="hover:text-foreground">
-          Machines
+          Infrastructure
         </Link>
         <ChevronRight className="h-4 w-4" />
         <span className="text-foreground">
@@ -89,7 +89,7 @@ export default function EnvironmentPage({
             (env?.name ?? "Environment")
           )}
         </h1>
-        <Button onClick={() => setAddOpen(true)}>Add Machine</Button>
+        <Button onClick={() => setAddOpen(true)}>Add</Button>
       </div>
 
       {loading ? (
@@ -106,7 +106,7 @@ export default function EnvironmentPage({
             Add your first machine to get started.
           </p>
           <Button className="mt-4" onClick={() => setAddOpen(true)}>
-            Add Machine
+            Add
           </Button>
         </div>
       ) : (

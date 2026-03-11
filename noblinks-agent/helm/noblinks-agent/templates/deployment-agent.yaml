@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "noblinks-agent.fullname" . }}-agent
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "noblinks-agent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "noblinks-agent.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: agent
+  template:
+    metadata:
+      labels:
+        {{- include "noblinks-agent.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: agent
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "noblinks-agent.serviceAccountName" . }}
+      containers:
+        - name: agent
+          image: "{{ .Values.agent.image.repository }}:{{ .Values.agent.image.tag }}"
+          imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              apk add --no-cache curl jq coreutils > /dev/null 2>&1
+              chmod +x /scripts/noblinks-agent-k8s
+              exec /scripts/noblinks-agent-k8s
+          env:
+            - name: NOBLINKS_URL
+              value: {{ .Values.noblinks.url | quote }}
+            - name: MACHINE_NAME
+              value: {{ .Values.noblinks.clusterName | default .Release.Name | quote }}
+            - name: AGENT_VERSION
+              value: {{ .Chart.AppVersion | quote }}
+            - name: PROMETHEUS_URL
+              value: {{ include "noblinks-agent.prometheusUrl" . | quote }}
+            - name: ALERTMANAGER_URL
+              value: {{ include "noblinks-agent.alertmanagerUrl" . | quote }}
+            - name: RULES_CONFIGMAP
+              value: {{ include "noblinks-agent.fullname" . }}-prometheus-rules
+            - name: AGENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "noblinks-agent.fullname" . }}-credentials
+                  key: agentToken
+            - name: MACHINE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "noblinks-agent.fullname" . }}-credentials
+                  key: machineId
+          volumeMounts:
+            - name: agent-script
+              mountPath: /scripts
+          resources:
+            {{- toYaml .Values.agent.resources | nindent 12 }}
+      volumes:
+        - name: agent-script
+          configMap:
+            name: {{ include "noblinks-agent.fullname" . }}-agent-script
+            defaultMode: 0755
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

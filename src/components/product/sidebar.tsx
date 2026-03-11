@@ -35,7 +35,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/overview", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboards", label: "Dashboards", icon: LayoutGrid },
-  { href: "/machines", label: "Machines", icon: Server },
+  { href: "/machines", label: "Infrastructure", icon: Server },
   { href: "/alerts", label: "Alerts", icon: AlertTriangle },
 ];
 

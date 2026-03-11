@@ -1,0 +1,137 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "noblinks-agent.fullname" . }}-reg-token
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "noblinks-agent.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-9"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+type: Opaque
+stringData:
+  REG_TOKEN: {{ .Values.noblinks.registrationToken | required "noblinks.registrationToken is required" | quote }}
+  CLUSTER_NAME: {{ .Values.noblinks.clusterName | default .Release.Name | quote }}
+  NOBLINKS_URL: {{ .Values.noblinks.url | quote }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "noblinks-agent.fullname" . }}-register
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "noblinks-agent.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-8"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 120
+  template:
+    metadata:
+      labels:
+        {{- include "noblinks-agent.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: register-hook
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "noblinks-agent.fullname" . }}-hook
+      containers:
+        - name: register
+          image: alpine:3.19
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              apk add --no-cache curl jq > /dev/null 2>&1
+
+              NOBLINKS_URL="${NOBLINKS_URL}"
+              REG_TOKEN="${REG_TOKEN}"
+              CLUSTER_NAME="${CLUSTER_NAME}"
+              AGENT_VERSION="0.1.0"
+              NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
+              SA_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+              CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              K8S_API="https://kubernetes.default.svc"
+              SECRET_NAME="{{ include "noblinks-agent.fullname" . }}-credentials"
+
+              echo "[noblinks] Checking for existing registration..."
+              EXISTING=$(curl -sf --cacert "$CA" \
+                -H "Authorization: Bearer $SA_TOKEN" \
+                "$K8S_API/api/v1/namespaces/$NAMESPACE/secrets/$SECRET_NAME" 2>/dev/null || echo "")
+
+              if echo "$EXISTING" | jq -e '.data.agentToken' > /dev/null 2>&1; then
+                echo "[noblinks] Already registered -- skipping registration"
+                exit 0
+              fi
+
+              echo "[noblinks] Registering cluster '$CLUSTER_NAME' with noblinks..."
+              HOSTNAME_VAL=$(hostname)
+              PAYLOAD=$(printf '{"machineName":"%s","hostname":"%s","agentVersion":"%s","type":"kubernetes"}' \
+                "$CLUSTER_NAME" "$HOSTNAME_VAL" "$AGENT_VERSION")
+
+              RESPONSE=$(curl -sf \
+                --max-time 30 \
+                -X POST "$NOBLINKS_URL/api/agent/register" \
+                -H "Authorization: Bearer $REG_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "$PAYLOAD") || {
+                echo "[noblinks] ERROR: Registration failed. Check your token and that $NOBLINKS_URL is reachable." >&2
+                exit 1
+              }
+
+              AGENT_TOKEN=$(echo "$RESPONSE" | jq -r '.agentToken // empty')
+              MACHINE_ID=$(echo "$RESPONSE"  | jq -r '.machineId  // empty')
+
+              if [ -z "$AGENT_TOKEN" ] || [ -z "$MACHINE_ID" ]; then
+                echo "[noblinks] ERROR: Registration response missing agentToken or machineId: $RESPONSE" >&2
+                exit 1
+              fi
+
+              echo "[noblinks] Registration successful. Machine ID: $MACHINE_ID"
+              echo "[noblinks] Storing credentials in Secret '$SECRET_NAME'..."
+
+              SECRET_BODY=$(cat <<ENDJSON
+              {
+                "apiVersion": "v1",
+                "kind": "Secret",
+                "metadata": {
+                  "name": "$SECRET_NAME",
+                  "namespace": "$NAMESPACE",
+                  "labels": {
+                    "app.kubernetes.io/managed-by": "noblinks-agent"
+                  }
+                },
+                "stringData": {
+                  "agentToken": "$AGENT_TOKEN",
+                  "machineId": "$MACHINE_ID"
+                }
+              }
+              ENDJSON
+              )
+
+              # Create or update the secret
+              HTTP_STATUS=$(curl -sf --cacert "$CA" \
+                -H "Authorization: Bearer $SA_TOKEN" \
+                -H "Content-Type: application/json" \
+                -X POST \
+                "$K8S_API/api/v1/namespaces/$NAMESPACE/secrets" \
+                -d "$SECRET_BODY" \
+                -o /dev/null -w "%{http_code}" 2>/dev/null || echo "000")
+
+              if [ "$HTTP_STATUS" = "409" ]; then
+                # Already exists -- patch it
+                curl -sf --cacert "$CA" \
+                  -H "Authorization: Bearer $SA_TOKEN" \
+                  -H "Content-Type: application/merge-patch+json" \
+                  -X PATCH \
+                  "$K8S_API/api/v1/namespaces/$NAMESPACE/secrets/$SECRET_NAME" \
+                  -d "$SECRET_BODY" > /dev/null
+              fi
+
+              echo "[noblinks] Credentials stored successfully."
+          envFrom:
+            - secretRef:
+                name: {{ include "noblinks-agent.fullname" . }}-reg-token

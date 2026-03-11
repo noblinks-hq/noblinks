@@ -1,0 +1,16 @@
+apiVersion: v2
+name: noblinks-agent
+description: Noblinks monitoring agent for Kubernetes clusters
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - monitoring
+  - alerting
+  - noblinks
+home: https://www.noblinks.com
+sources:
+  - https://github.com/noblinks/noblinks
+maintainers:
+  - name: Noblinks
+    url: https://www.noblinks.com

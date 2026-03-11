@@ -1,0 +1,29 @@
+{{- if eq (include "noblinks-agent.deployAlertmanager" .) "true" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "noblinks-agent.fullname" . }}-alertmanager-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "noblinks-agent.labels" . | nindent 4 }}
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+
+    route:
+      receiver: 'noblinks'
+      group_by: ['noblinks_alert_id']
+      group_wait: 10s
+      group_interval: 30s
+      repeat_interval: 4h
+
+    receivers:
+      - name: 'noblinks'
+        webhook_configs:
+          - url: '{{ .Values.noblinks.url }}/api/agent/webhook'
+            http_config:
+              authorization:
+                credentials_file: /etc/noblinks/agentToken
+            send_resolved: true
+{{- end }}

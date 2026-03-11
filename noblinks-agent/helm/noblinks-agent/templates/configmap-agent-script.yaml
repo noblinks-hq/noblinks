@@ -1,0 +1,207 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "noblinks-agent.fullname" . }}-agent-script
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "noblinks-agent.labels" . | nindent 4 }}
+data:
+  noblinks-agent-k8s: |
+    #!/usr/bin/env sh
+    set -eu
+
+    : "${NOBLINKS_URL:?NOBLINKS_URL not set}"
+    : "${AGENT_TOKEN:?AGENT_TOKEN not set}"
+    : "${MACHINE_NAME:?MACHINE_NAME not set}"
+    : "${AGENT_VERSION:?AGENT_VERSION not set}"
+    : "${PROMETHEUS_URL:?PROMETHEUS_URL not set}"
+
+    ALERTMANAGER_URL="${ALERTMANAGER_URL:-}"
+    HEARTBEAT_INTERVAL="${HEARTBEAT_INTERVAL:-30}"
+    SYNC_INTERVAL="${SYNC_INTERVAL:-60}"
+    NAMESPACE="$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null || echo default)"
+    SA_TOKEN_FILE="/var/run/secrets/kubernetes.io/serviceaccount/token"
+    SA_CA_FILE="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    K8S_API="https://kubernetes.default.svc"
+    RULES_CONFIGMAP="${RULES_CONFIGMAP:-{{ include "noblinks-agent.fullname" . }}-prometheus-rules}"
+
+    LAST_HEARTBEAT=0
+    LAST_SYNC=0
+    LAST_RULES_HASH=""
+
+    log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] noblinks-agent: $*"; }
+
+    http_healthy() {
+      local url="$1"
+      curl -sf --max-time 5 "${url}/-/healthy" > /dev/null 2>&1
+    }
+
+    send_heartbeat() {
+      prometheus_ok=false
+      alertmanager_ok=false
+      node_exporter_ok=false
+
+      http_healthy "$PROMETHEUS_URL"   && prometheus_ok=true
+      [ -n "$ALERTMANAGER_URL" ] && http_healthy "$ALERTMANAGER_URL" && alertmanager_ok=true
+
+      payload=$(printf '{"agentVersion":"%s","prometheusRunning":%s,"alertmanagerRunning":%s,"nodeExporterRunning":%s,"type":"kubernetes"}' \
+        "$AGENT_VERSION" "$prometheus_ok" "$alertmanager_ok" "$node_exporter_ok")
+
+      curl -sf --max-time 10 \
+        -X POST "${NOBLINKS_URL}/api/agent/heartbeat" \
+        -H "Authorization: Bearer ${AGENT_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "$payload" > /dev/null || log "heartbeat failed (will retry)"
+    }
+
+    update_rules_configmap() {
+      local rules="$1"
+      local sa_token
+      sa_token=$(cat "$SA_TOKEN_FILE")
+
+      # Encode rules as base64 for the k8s secret/configmap API
+      local b64_rules
+      b64_rules=$(printf '%s' "$rules" | base64 | tr -d '\n')
+
+      local body
+      body=$(printf '{"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"%s","namespace":"%s"},"binaryData":{"noblinks.yml":"%s"}}' \
+        "$RULES_CONFIGMAP" "$NAMESPACE" "$b64_rules")
+
+      # Try to patch first, create if not found
+      local status
+      status=$(curl -sf --cacert "$SA_CA_FILE" \
+        -H "Authorization: Bearer $sa_token" \
+        -H "Content-Type: application/merge-patch+json" \
+        -X PATCH \
+        "$K8S_API/api/v1/namespaces/$NAMESPACE/configmaps/$RULES_CONFIGMAP" \
+        -d "$body" \
+        -o /dev/null -w "%{http_code}" 2>/dev/null || echo "000")
+
+      if [ "$status" = "404" ]; then
+        curl -sf --cacert "$SA_CA_FILE" \
+          -H "Authorization: Bearer $sa_token" \
+          -H "Content-Type: application/json" \
+          -X POST \
+          "$K8S_API/api/v1/namespaces/$NAMESPACE/configmaps" \
+          -d "$body" > /dev/null 2>&1 || log "failed to create rules configmap"
+      elif [ "$status" != "200" ]; then
+        log "failed to update rules configmap (http $status)"
+      fi
+    }
+
+    sync_rules() {
+      local new_rules
+      new_rules=$(curl -sf --max-time 15 \
+        "${NOBLINKS_URL}/api/agent/rules" \
+        -H "Authorization: Bearer ${AGENT_TOKEN}" || true)
+
+      [ -z "$new_rules" ] && { log "failed to fetch rules, skipping"; return; }
+
+      local new_hash
+      new_hash=$(printf '%s' "$new_rules" | sha256sum | awk '{print $1}')
+      [ "$new_hash" = "$LAST_RULES_HASH" ] && return
+
+      log "rules changed, updating Prometheus"
+      update_rules_configmap "$new_rules"
+      LAST_RULES_HASH="$new_hash"
+
+      # Hot-reload Prometheus
+      curl -sf --max-time 5 -X POST "${PROMETHEUS_URL}/-/reload" > /dev/null \
+        || log "prometheus reload failed (rules updated but not reloaded)"
+
+      # Report active alert IDs
+      local alert_ids ids_json
+      alert_ids=$(printf '%s' "$new_rules" \
+        | grep 'noblinks_alert_id:' \
+        | sed 's/.*noblinks_alert_id:[[:space:]]*"\?\([^"[:space:]]*\)"\?.*/\1/' \
+        | sort -u || true)
+
+      if [ -n "$alert_ids" ]; then
+        ids_json=$(printf '%s' "$alert_ids" | awk '{printf "\"%s\",", $0}' | sed 's/,$//')
+        curl -sf --max-time 10 \
+          -X PATCH "${NOBLINKS_URL}/api/agent/status" \
+          -H "Authorization: Bearer ${AGENT_TOKEN}" \
+          -H "Content-Type: application/json" \
+          -d "{\"activatedAlertIds\":[${ids_json}]}" > /dev/null \
+          || log "status update failed"
+      fi
+    }
+
+    execute_query() {
+      local query_id="$1" promql="$2"
+      local prom_response status labels_json
+
+      prom_response=$(curl -sf --max-time 10 \
+        -G --data-urlencode "query=${promql}" \
+        "${PROMETHEUS_URL}/api/v1/query" || true)
+
+      if [ -z "$prom_response" ]; then
+        curl -sf --max-time 10 \
+          -X POST "${NOBLINKS_URL}/api/agent/query-result" \
+          -H "Authorization: Bearer ${AGENT_TOKEN}" \
+          -H "Content-Type: application/json" \
+          -d "{\"id\":\"${query_id}\",\"error\":\"Prometheus unreachable\"}" > /dev/null || true
+        return
+      fi
+
+      status=$(printf '%s' "$prom_response" | jq -r '.status' 2>/dev/null || echo "error")
+      if [ "$status" != "success" ]; then
+        curl -sf --max-time 10 \
+          -X POST "${NOBLINKS_URL}/api/agent/query-result" \
+          -H "Authorization: Bearer ${AGENT_TOKEN}" \
+          -H "Content-Type: application/json" \
+          -d "{\"id\":\"${query_id}\",\"error\":\"Query failed\"}" > /dev/null || true
+        return
+      fi
+
+      labels_json=$(printf '%s' "$prom_response" \
+        | jq '[.data.result[].metric.name // empty] | unique' 2>/dev/null || echo "[]")
+
+      curl -sf --max-time 10 \
+        -X POST "${NOBLINKS_URL}/api/agent/query-result" \
+        -H "Authorization: Bearer ${AGENT_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "{\"id\":\"${query_id}\",\"result\":${labels_json}}" > /dev/null || true
+    }
+
+    poll_pending_queries() {
+      local response num_queries i query_id promql
+      response=$(curl -sf --max-time 10 \
+        "${NOBLINKS_URL}/api/agent/pending-queries" \
+        -H "Authorization: Bearer ${AGENT_TOKEN}" || true)
+
+      [ -z "$response" ] && return
+      num_queries=$(printf '%s' "$response" | jq '.queries | length' 2>/dev/null || echo 0)
+      [ "$num_queries" -eq 0 ] && return
+
+      log "executing ${num_queries} pending query/queries"
+      i=0
+      while [ "$i" -lt "$num_queries" ]; do
+        query_id=$(printf '%s' "$response" | jq -r ".queries[$i].id")
+        promql=$(printf '%s'  "$response" | jq -r ".queries[$i].promql")
+        execute_query "$query_id" "$promql"
+        i=$((i + 1))
+      done
+    }
+
+    log "starting k8s mode (cluster=${MACHINE_NAME}, version=${AGENT_VERSION})"
+    log "prometheus: ${PROMETHEUS_URL}"
+
+    send_heartbeat
+    LAST_HEARTBEAT=$(date +%s)
+    sync_rules
+    LAST_SYNC=$LAST_HEARTBEAT
+
+    while true; do
+      sleep 5
+      poll_pending_queries
+      NOW=$(date +%s)
+      if [ $((NOW - LAST_HEARTBEAT)) -ge "$HEARTBEAT_INTERVAL" ]; then
+        send_heartbeat
+        LAST_HEARTBEAT=$NOW
+      fi
+      if [ $((NOW - LAST_SYNC)) -ge "$SYNC_INTERVAL" ]; then
+        sync_rules
+        LAST_SYNC=$NOW
+      fi
+    done

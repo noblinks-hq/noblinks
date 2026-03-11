@@ -1,0 +1,17 @@
+{{- if and .Values.kubeStateMetrics.enabled .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "noblinks-agent.fullname" . }}-kube-state-metrics
+  labels:
+    {{- include "noblinks-agent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: kube-state-metrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "noblinks-agent.fullname" . }}-kube-state-metrics
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "noblinks-agent.fullname" . }}-kube-state-metrics
+    namespace: {{ .Release.Namespace }}
+{{- end }}

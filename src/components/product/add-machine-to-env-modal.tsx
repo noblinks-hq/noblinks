@@ -70,16 +70,16 @@ export function AddMachineToEnvModal({
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Add Machine</DialogTitle>
+            <DialogTitle>Add Infrastructure</DialogTitle>
             <DialogDescription>
-              Add a new machine to this environment. You will be able to connect
+              Add new infrastructure to this environment. You will be able to connect
               it after creation.
             </DialogDescription>
           </DialogHeader>
 
           <div className="mt-4 space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="machine-name">Machine Name</Label>
+              <Label htmlFor="machine-name">Name</Label>
               <Input
                 id="machine-name"
                 placeholder="e.g. web-01"
@@ -105,7 +105,7 @@ export function AddMachineToEnvModal({
 
           <DialogFooter className="mt-6">
             <Button type="submit" disabled={submitting}>
-              {submitting ? "Adding..." : "Add Machine"}
+              {submitting ? "Adding..." : "Add Infrastructure"}
             </Button>
           </DialogFooter>
         </form>
