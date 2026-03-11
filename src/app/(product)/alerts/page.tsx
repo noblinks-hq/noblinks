@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Plus, Trash2 } from "lucide-react";
+import { PageHeader } from "@/components/product/page-header";
 import { SeverityBadge } from "@/components/product/severity-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -94,15 +95,18 @@ export default function AlertsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Alerts</h1>
-        <Button asChild>
-          <Link href="/alerts/create">
-            <Plus className="mr-2 h-4 w-4" />
-            Create Alert
-          </Link>
-        </Button>
-      </div>
+      <PageHeader
+        title="Alerts"
+        icon={AlertTriangle}
+        actions={
+          <Button asChild>
+            <Link href="/alerts/create">
+              <Plus className="mr-2 h-4 w-4" />
+              Create Alert
+            </Link>
+          </Button>
+        }
+      />
 
       {alerts.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">

@@ -1,27 +1,58 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2 } from "lucide-react";
+import {
+  LayoutDashboard,
+  Sparkles,
+  CheckCircle2,
+  RefreshCw,
+} from "lucide-react";
+import { PageHeader } from "@/components/product/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import type { DbMachine } from "@/lib/types";
 
-const severityDotColor: Record<string, string> = {
-  critical: "bg-red-500",
-  warning: "bg-amber-500",
-};
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
-interface DbAlertRow {
+interface FiringAlert {
   id: string;
   name: string;
   machine: string;
   severity: string;
   status: string;
+  firedAt: string | null;
   createdAt: string;
 }
 
-function timeAgo(iso: string): string {
+interface OfflineMachine {
+  id: string;
+  name: string;
+  hostname: string | null;
+  lastSeen: string | null;
+  status: string;
+}
+
+interface Suggestion {
+  machineName: string;
+  metricKey: string;
+  message: string;
+  severity: string;
+}
+
+interface OverviewData {
+  firingAlerts: FiringAlert[];
+  offlineMachines: OfflineMachine[];
+  suggestions: Suggestion[];
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function timeAgo(iso: string | null | undefined): string {
+  if (!iso) return "Unknown";
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diff / 60000);
   if (minutes < 1) return "Just now";
@@ -31,75 +62,146 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-export default function OverviewPage() {
-  const [dbAlerts, setDbAlerts] = useState<DbAlertRow[]>([]);
-  const [machines, setMachines] = useState<DbMachine[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+const SEVERITY_BORDER: Record<string, string> = {
+  critical: "border-l-red-500",
+  warning: "border-l-amber-500",
+  info: "border-l-blue-500",
+};
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
-      fetch("/api/alerts").then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/machines").then((r) => (r.ok ? r.json() : null)),
-    ])
-      .then(([alertData, machineData]) => {
-        if (cancelled) return;
-        if (alertData) setDbAlerts(alertData.alerts ?? []);
-        if (machineData) setMachines(machineData.machines ?? []);
-        setLastUpdated(new Date());
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
+const SEVERITY_BADGE: Record<string, string> = {
+  critical: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+  warning: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+  info: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+};
+
+const SEVERITY_ICON_COLOR: Record<string, string> = {
+  critical: "text-red-500",
+  warning: "text-amber-500",
+  info: "text-blue-500",
+};
+
+// ---------------------------------------------------------------------------
+// Page Component
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Dummy data for preview
+// ---------------------------------------------------------------------------
+
+const now = new Date();
+const ago = (minutes: number) => new Date(now.getTime() - minutes * 60_000).toISOString();
+
+const DUMMY_DATA: OverviewData = {
+  firingAlerts: [
+    { id: "1", name: "High CPU Usage", machine: "prod-web-01", severity: "critical", status: "firing", firedAt: ago(14), createdAt: ago(120) },
+    { id: "2", name: "Memory Usage Threshold", machine: "prod-db-02", severity: "warning", status: "firing", firedAt: ago(47), createdAt: ago(240) },
+    { id: "3", name: "Disk Space Low", machine: "prod-worker-03", severity: "warning", status: "firing", firedAt: ago(91), createdAt: ago(360) },
+  ],
+  offlineMachines: [
+    { id: "m1", name: "staging-worker-02", hostname: "stg-wkr-02.internal", lastSeen: ago(43), status: "offline" },
+    { id: "m2", name: "prod-monitor-01", hostname: "mon-01.internal", lastSeen: ago(182), status: "offline" },
+  ],
+  suggestions: [
+    { machineName: "prod-db-02", metricKey: "memory_used_percent", message: "Memory usage on **prod-db-02** has increased 38% in the last 2 hours (now at 87.4%). You may need to add more RAM or investigate memory leaks.", severity: "critical" },
+    { machineName: "prod-web-01", metricKey: "cpu_usage_percent", message: "CPU usage on **prod-web-01** has risen 52% recently (now at 91.2%). Consider investigating runaway processes or scaling up.", severity: "critical" },
+    { machineName: "prod-worker-03", metricKey: "disk_used_percent", message: "Disk usage on **prod-worker-03** is climbing fast — up 22% recently (now at 78.6%). Consider cleaning up logs or expanding storage.", severity: "warning" },
+    { machineName: "prod-db-01", metricKey: "load_5", message: "System load on **prod-db-01** has increased 31% (current: 4.82). The machine may be under stress.", severity: "warning" },
+  ],
+};
+
+// ---------------------------------------------------------------------------
+// Page Component
+// ---------------------------------------------------------------------------
+
+export default function OverviewPage() {
+  const [data, setData] = useState<OverviewData>(DUMMY_DATA);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    try {
+      const res = await fetch("/api/overview");
+      if (res.ok) {
+        const json = (await res.json()) as OverviewData;
+        const hasRealData =
+          json.firingAlerts.length > 0 ||
+          json.offlineMachines.length > 0 ||
+          json.suggestions.length > 0;
+        if (hasRealData) setData(json);
+      }
+    } catch {
+      // Silently fail — keep showing current data
+    } finally {
+      setRefreshing(false);
+    }
   }, []);
 
-  const firingAlerts = dbAlerts.filter((a) => a.status === "firing");
-  const offlineMachines = machines.filter((m) => m.status === "offline");
-  const allClear = !loading && firingAlerts.length === 0 && offlineMachines.length === 0;
+  // Initial load + 30-second auto-refresh
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(() => fetchData(true), 30_000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
-  if (loading) {
-    return (
-      <div className="mx-auto max-w-4xl space-y-10 py-4">
-        <section>
-          <Skeleton className="h-6 w-40 mb-3" />
-          <div className="space-y-3">
-            {[1, 2].map((i) => <Skeleton key={i} className="h-16 rounded-lg" />)}
-          </div>
-        </section>
-      </div>
-    );
-  }
+  const { firingAlerts, offlineMachines, suggestions } = data;
+  const allClear =
+    firingAlerts.length === 0 &&
+    offlineMachines.length === 0 &&
+    suggestions.length === 0;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-10 py-4">
-      {/* Active Alerts */}
+    <div className="mx-auto max-w-4xl space-y-8 py-4">
+      <PageHeader
+        title="Overview"
+        icon={LayoutDashboard}
+        actions={
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => fetchData(true)}
+            disabled={refreshing}
+          >
+            <RefreshCw
+              className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+            />
+            Refresh
+          </Button>
+        }
+      />
+
+      {/* ----------------------------------------------------------------- */}
+      {/* 1. Firing Alerts                                                  */}
+      {/* ----------------------------------------------------------------- */}
       {firingAlerts.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold">Active Alerts</h2>
+          <h2 className="text-lg font-semibold">Firing Alerts</h2>
           <div className="mt-1 border-b" />
           <div className="mt-4 space-y-3">
-            {firingAlerts.map((alert) => (
+            {firingAlerts.map((a) => (
               <div
-                key={alert.id}
-                className="flex items-center gap-4 rounded-lg border px-5 py-4 transition-colors hover:bg-muted/50"
+                key={a.id}
+                className={`flex items-center gap-4 rounded-lg border border-l-4 px-5 py-4 transition-colors hover:bg-muted/50 ${SEVERITY_BORDER[a.severity] ?? "border-l-gray-400"}`}
               >
-                <span
-                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${severityDotColor[alert.severity] ?? "bg-gray-400"}`}
-                />
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium">{alert.name}</p>
-                  <p
-                    className="mt-0.5 text-sm text-muted-foreground"
-                    suppressHydrationWarning
-                  >
-                    {alert.machine} &middot; Created {timeAgo(alert.createdAt)}
+                  <p className="font-medium">{a.name}</p>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    {a.machine}
                   </p>
                 </div>
+                <Badge
+                  variant="secondary"
+                  className={`shrink-0 ${SEVERITY_BADGE[a.severity] ?? ""}`}
+                >
+                  {a.severity}
+                </Badge>
+                <span
+                  className="shrink-0 text-sm text-muted-foreground"
+                  suppressHydrationWarning
+                >
+                  {timeAgo(a.firedAt)}
+                </span>
                 <Button variant="ghost" size="sm" asChild>
-                  <Link href={`/alerts/${alert.id}`}>View</Link>
+                  <Link href={`/alerts/${a.id}`}>View</Link>
                 </Button>
               </div>
             ))}
@@ -107,10 +209,12 @@ export default function OverviewPage() {
         </section>
       )}
 
-      {/* Offline Machines */}
+      {/* ----------------------------------------------------------------- */}
+      {/* 3. Disconnected Machines                                          */}
+      {/* ----------------------------------------------------------------- */}
       {offlineMachines.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold">Offline Machines</h2>
+          <h2 className="text-lg font-semibold">Disconnected Machines</h2>
           <div className="mt-1 border-b" />
           <div className="mt-4 space-y-3">
             {offlineMachines.map((m) => (
@@ -121,8 +225,14 @@ export default function OverviewPage() {
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" />
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">{m.name}</p>
-                  <p className="mt-0.5 text-sm text-muted-foreground" suppressHydrationWarning>
-                    {m.lastSeen ? `Last seen ${timeAgo(m.lastSeen)}` : "Never connected"}
+                  <p
+                    className="mt-0.5 text-sm text-muted-foreground"
+                    suppressHydrationWarning
+                  >
+                    {m.lastSeen
+                      ? `Last seen ${timeAgo(m.lastSeen)}`
+                      : "Never connected"}
+                    {m.hostname && ` \u00B7 ${m.hostname}`}
                   </p>
                 </div>
                 <Button variant="ghost" size="sm" asChild>
@@ -134,26 +244,65 @@ export default function OverviewPage() {
         </section>
       )}
 
-      {/* Empty State */}
+      {/* ----------------------------------------------------------------- */}
+      {/* 5. AI Insights                                                    */}
+      {/* ----------------------------------------------------------------- */}
+      {suggestions.length > 0 && (
+        <section>
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-purple-500" />
+            <h2 className="text-lg font-semibold">AI Insights</h2>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Based on metric trends from the last 24 hours
+          </p>
+          <div className="mt-4 space-y-3">
+            {suggestions.map((s, idx) => (
+              <div
+                key={`${s.machineName}-${s.metricKey}-${idx}`}
+                className={`relative rounded-lg border border-l-4 px-5 py-4 ${SEVERITY_BORDER[s.severity] ?? "border-l-gray-400"}`}
+              >
+                <div className="flex items-start gap-3">
+                  <Sparkles
+                    className={`mt-0.5 h-4 w-4 shrink-0 ${SEVERITY_ICON_COLOR[s.severity] ?? "text-muted-foreground"}`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm leading-relaxed">{s.message}</p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <Badge
+                      variant="outline"
+                      className="text-xs"
+                    >
+                      {s.machineName}
+                    </Badge>
+                    <Badge
+                      variant="secondary"
+                      className={`text-xs ${SEVERITY_BADGE[s.severity] ?? ""}`}
+                    >
+                      {s.severity}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* 6. Empty state                                                    */}
+      {/* ----------------------------------------------------------------- */}
       {allClear && (
         <div className="flex flex-col items-center justify-center py-32 text-center">
           <CheckCircle2 className="h-12 w-12 text-green-500" />
-          <h2 className="mt-6 text-2xl font-semibold">All systems operational</h2>
+          <h2 className="mt-6 text-2xl font-semibold">
+            All systems operational
+          </h2>
           <p className="mt-2 text-muted-foreground">
-            No active alerts or offline machines detected.
+            No active alerts, offline machines, or anomalies detected.
           </p>
-          {lastUpdated && (
-            <p className="mt-2 text-xs text-muted-foreground" suppressHydrationWarning>
-              Last updated {lastUpdated.toLocaleTimeString()}
-            </p>
-          )}
         </div>
-      )}
-
-      {lastUpdated && !allClear && (
-        <p className="text-xs text-muted-foreground" suppressHydrationWarning>
-          Last updated {lastUpdated.toLocaleTimeString()}
-        </p>
       )}
     </div>
   );

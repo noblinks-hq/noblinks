@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, Check, Copy, Eye, EyeOff, Mail, Plus, RefreshCw, Slack, Trash2, X } from "lucide-react";
+import { Bell, Check, Copy, Eye, EyeOff, Mail, Plus, RefreshCw, Settings as SettingsIcon, Slack, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { BillingButton } from "@/components/product/billing-button";
+import { PageHeader } from "@/components/product/page-header";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,7 +45,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Settings</h1>
+      <PageHeader title="Settings" icon={SettingsIcon} />
 
       {/* Organization */}
       <div className="rounded-lg border p-6 space-y-4">

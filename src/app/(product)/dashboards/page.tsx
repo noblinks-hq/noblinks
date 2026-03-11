@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Monitor, Search } from "lucide-react";
+import { LayoutGrid, Monitor, Search } from "lucide-react";
 import { CreateDashboardModal } from "@/components/product/create-dashboard-modal";
 import { DashboardCard } from "@/components/product/dashboard-card";
+import { PageHeader } from "@/components/product/page-header";
 import {
   SlideshowConfigModal,
   type SlideshowConfig,
@@ -83,18 +84,21 @@ export default function DashboardsPage() {
   return (
     <>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Dashboards</h1>
-          <div className="flex items-center gap-2">
-            {!loading && dashboards.length > 0 && (
-              <SlideshowConfigModal
-                dashboards={dashboards}
-                onStart={setSlideshowConfig}
-              />
-            )}
-            <CreateDashboardModal onCreated={fetchDashboards} />
-          </div>
-        </div>
+        <PageHeader
+          title="Dashboards"
+          icon={LayoutGrid}
+          actions={
+            <>
+              {!loading && dashboards.length > 0 && (
+                <SlideshowConfigModal
+                  dashboards={dashboards}
+                  onStart={setSlideshowConfig}
+                />
+              )}
+              <CreateDashboardModal onCreated={fetchDashboards} />
+            </>
+          }
+        />
 
         {!loading && dashboards.length > 0 && (
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">

@@ -16,6 +16,8 @@ import {
   Moon,
   User,
   LogOut,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -110,24 +112,33 @@ function ThemeToggle() {
   );
 }
 
-function BottomBar({ settingsActive, onSettingsClick }: { settingsActive: boolean; onSettingsClick?: () => void }) {
+function BottomBar({
+  settingsActive,
+  collapsed,
+  onSettingsClick,
+}: {
+  settingsActive: boolean;
+  collapsed?: boolean;
+  onSettingsClick?: () => void;
+}) {
   return (
-    <div className="border-t flex">
+    <div className={cn("border-t", collapsed ? "flex flex-col items-center py-2 gap-1" : "flex")}>
       <Link
         href="/settings"
         {...(onSettingsClick ? { onClick: onSettingsClick } : {})}
         className={cn(
-          "flex-1 flex items-center justify-center py-3 transition-colors rounded-none",
+          "flex items-center justify-center transition-colors rounded-none",
+          collapsed ? "w-10 h-10" : "flex-1 py-3",
           settingsActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
         )}
         aria-label="Settings"
       >
         <Settings className="h-4 w-4" />
       </Link>
-      <div className="flex-1 flex items-center justify-center py-3">
+      <div className={cn("flex items-center justify-center", collapsed ? "w-10 h-10" : "flex-1 py-3")}>
         <SidebarUserButton />
       </div>
-      <div className="flex-1 flex items-center justify-center py-3">
+      <div className={cn("flex items-center justify-center", collapsed ? "w-10 h-10" : "flex-1 py-3")}>
         <ThemeToggle />
       </div>
     </div>
@@ -235,65 +246,51 @@ export function Sidebar() {
           ))}
         </nav>
 
-        <BottomBar settingsActive={settingsActive} onSettingsClick={() => setMobileOpen(false)} />
+        <BottomBar settingsActive={settingsActive} collapsed={false} onSettingsClick={() => setMobileOpen(false)} />
       </aside>
-
-      {/* ── Desktop burger when collapsed (floats over content) ── */}
-      {collapsed && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="hidden md:inline-flex fixed top-3 left-3 z-50"
-          onClick={() => setCollapsed(false)}
-          aria-label="Expand sidebar"
-        >
-          <Menu className="h-5 w-5" />
-        </Button>
-      )}
 
       {/* ── Desktop sidebar (static, collapsible) ── */}
-      <aside
-        style={{ width: collapsed ? "0" : "10rem" }}
-        className="hidden md:flex flex-col h-full border-r bg-background transition-[width] duration-200 overflow-hidden shrink-0"
+      <div
+        style={{ width: collapsed ? "3.5rem" : "10rem" }}
+        className="relative hidden md:block transition-[width] duration-200 shrink-0"
       >
-        <div className="flex h-14 items-center border-b px-2 shrink-0">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="shrink-0"
-            onClick={() => setCollapsed((c) => !c)}
-            aria-label="Collapse sidebar"
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
-          {!collapsed && (
+        <aside className="flex flex-col h-full w-full border-r bg-background overflow-hidden">
+          <div className="flex h-14 items-center justify-center border-b shrink-0">
             <Link
               href="/overview"
-              className="flex items-center gap-2 font-semibold text-primary ml-2 whitespace-nowrap"
+              className="flex items-center gap-2 font-semibold text-primary whitespace-nowrap"
             >
               <Bot className="h-5 w-5 shrink-0" />
-              <span>Noblinks</span>
+              {!collapsed && <span>Noblinks</span>}
             </Link>
-          )}
-        </div>
+          </div>
 
-        {!collapsed && (
-          <>
-            <nav className="flex flex-col gap-1 p-2 flex-1" aria-label="Product navigation">
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.href}
-                  {...item}
-                  collapsed={false}
-                  active={isActive(pathname, item.href)}
-                />
-              ))}
-            </nav>
+          <nav
+            className={cn("flex flex-col gap-1 p-2 flex-1", collapsed && "items-center")}
+            aria-label="Product navigation"
+          >
+            {navItems.map((item) => (
+              <NavLink
+                key={item.href}
+                {...item}
+                collapsed={collapsed}
+                active={isActive(pathname, item.href)}
+              />
+            ))}
+          </nav>
 
-            <BottomBar settingsActive={settingsActive} />
-          </>
-        )}
-      </aside>
+          <BottomBar settingsActive={settingsActive} collapsed={collapsed} />
+        </aside>
+
+        {/* ── Collapse / expand toggle at the border intersection ── */}
+        <button
+          onClick={() => setCollapsed((c) => !c)}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="absolute right-0 top-14 z-10 flex h-5 w-5 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full border bg-background text-muted-foreground shadow-sm transition-colors hover:text-foreground"
+        >
+          {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
+        </button>
+      </div>
     </>
   );
 }
