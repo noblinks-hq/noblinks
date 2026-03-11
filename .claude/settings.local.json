@@ -56,7 +56,9 @@
       "Bash(bash -n /Users/rashidiqbal/noblinks/noblinks/noblinks-agent/install.sh)",
       "Bash(which helm:*)",
       "Bash(helm template:*)",
-      "Bash(cd /Users/rashidiqbal/noblinks/noblinks/noblinks-agent/helm && helm lint noblinks-agent 2>&1)"
+      "Bash(cd /Users/rashidiqbal/noblinks/noblinks/noblinks-agent/helm && helm lint noblinks-agent 2>&1)",
+      "Bash(npx tsc:*)",
+      "Bash(ls /Users/rashidiqbal/noblinks/noblinks/src/app/\\\\\\(product\\\\\\)/cluster-chat/ 2>/dev/null || echo \"directory does not exist\")"
     ]
   },
   "enableAllProjectMcpServers": true,

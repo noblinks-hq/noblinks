@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Activity, AlignLeft, BarChart2, Check, ChevronDown, ChevronRight, ChevronUp, Gauge, LayoutGrid, Pencil, PieChart as PieIcon, Sparkles, Trash2, X } from "lucide-react";
 import { AddWidgetModal } from "@/components/product/add-widget-modal";
 import { WidgetChart } from "@/components/product/widget-chart";
+import { WidgetChatPanel } from "@/components/product/widget-chat-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -100,7 +101,8 @@ export default function DashboardDetailPage({
     categoryColors[dashboard?.category ?? "custom"] ?? categoryColors.custom;
 
   return (
-    <div className="space-y-6">
+    <>
+    <div className="space-y-6 pb-16">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1 text-sm text-muted-foreground">
         <Link href="/dashboards" className="hover:text-foreground">
@@ -223,6 +225,8 @@ export default function DashboardDetailPage({
         </div>
       )}
     </div>
+    <WidgetChatPanel dashboardId={id} onWidgetCreated={fetchData} />
+    </>
   );
 }
 
@@ -331,7 +335,9 @@ function WidgetCard({
           ) : (
             <>
               <div className="min-w-0">
-                <h3 className="font-medium leading-tight truncate">{w.title}</h3>
+                <h3 className="font-medium leading-tight truncate">
+                  {w.title.includes(" — ") ? w.title.split(" — ")[0] : w.title}
+                </h3>
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <Badge variant="secondary" className="text-xs">
@@ -359,6 +365,9 @@ function WidgetCard({
           )}
         </div>
         <WidgetChart widget={w} dashboardId={dashboardId} />
+        <p className="text-xs text-muted-foreground truncate">
+          {w.title.includes(" — ") ? w.title.split(" — ").slice(1).join(" — ") : w.machine}
+        </p>
       </div>
     </div>
   );

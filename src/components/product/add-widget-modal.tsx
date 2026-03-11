@@ -55,7 +55,15 @@ interface AiWidgetResult {
   generatedScrapeQuery?: string;
 }
 
-type Step = "input" | "analyzing" | "clarify" | "review-generated" | "review" | "creating" | "success" | "error";
+interface MultiWidgetItem {
+  title: string;
+  widgetType: string;
+  metric: string;
+  machine: string;
+  capabilityKey: string;
+}
+
+type Step = "input" | "analyzing" | "clarify" | "review-generated" | "review" | "review-multi" | "creating" | "success" | "error";
 type ErrorKind = "api" | "no_match";
 
 const WIDGET_TYPE_OPTIONS: WidgetType[] = ["timeseries", "stat", "bar", "pie", "toplist"];
@@ -85,6 +93,7 @@ export function AddWidgetModal({ dashboardId, onCreated, externalOpen, onExterna
   const [editMachine, setEditMachine] = useState("");
   const [editType, setEditType] = useState<WidgetType>("timeseries");
   const [editing, setEditing] = useState(false);
+  const [multiWidgets, setMultiWidgets] = useState<MultiWidgetItem[]>([]);
 
   // Fetch machines when modal opens
   useEffect(() => {
@@ -106,6 +115,7 @@ export function AddWidgetModal({ dashboardId, onCreated, externalOpen, onExterna
     setEditMachine(initialMachine);
     setEditType("timeseries");
     setSelectedMachine(initialMachine);
+    setMultiWidgets([]);
   }
 
   function handleOpenChange(nextOpen: boolean) {
@@ -149,20 +159,28 @@ export function AddWidgetModal({ dashboardId, onCreated, externalOpen, onExterna
         throw new Error(msg);
       }
 
-      const data: AiWidgetResult = await res.json();
-      setAiResult(data);
+      const data = await res.json();
 
-      if (data.matched && data.widgetTitle && data.machine && data.widgetType) {
-        setEditTitle(data.widgetTitle);
-        setEditMachine(selectedMachine || data.machine);
-        setEditType(data.widgetType);
-        setStep(data.generated ? "review-generated" : "review");
-      } else if (data.errorType === "vague") {
+      if (data.multiWidget === true) {
+        setMultiWidgets(data.widgets as MultiWidgetItem[]);
+        setStep("review-multi");
+        return;
+      }
+
+      const singleData = data as AiWidgetResult;
+      setAiResult(singleData);
+
+      if (singleData.matched && singleData.widgetTitle && singleData.machine && singleData.widgetType) {
+        setEditTitle(singleData.widgetTitle);
+        setEditMachine(selectedMachine || singleData.machine);
+        setEditType(singleData.widgetType);
+        setStep(singleData.generated ? "review-generated" : "review");
+      } else if (singleData.errorType === "vague") {
         setStep("clarify");
       } else {
         setErrorKind("no_match");
         setErrorMessage(
-          data.noMatchReason ||
+          singleData.noMatchReason ||
             "Could not match your request to any capability."
         );
         setStep("error");
@@ -206,6 +224,35 @@ export function AddWidgetModal({ dashboardId, onCreated, externalOpen, onExterna
       setErrorMessage(
         err instanceof Error ? err.message : "Failed to add widget"
       );
+      setStep("error");
+    }
+  }
+
+  async function handleConfirmMulti() {
+    if (multiWidgets.length === 0) return;
+    setStep("creating");
+
+    try {
+      await Promise.all(
+        multiWidgets.map((w) =>
+          fetch(`/api/dashboards/${dashboardId}/widgets`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: w.title,
+              type: w.widgetType,
+              metric: w.metric,
+              machine: w.machine,
+              capabilityKey: w.capabilityKey ?? null,
+              thresholdValue: null,
+            }),
+          })
+        )
+      );
+      setStep("success");
+    } catch (err) {
+      setErrorKind("api");
+      setErrorMessage(err instanceof Error ? err.message : "Failed to add widgets");
       setStep("error");
     }
   }
@@ -423,6 +470,37 @@ export function AddWidgetModal({ dashboardId, onCreated, externalOpen, onExterna
           </>
         )}
 
+        {/* Step: Review Multi-Widget */}
+        {step === "review-multi" && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-purple-500" />
+                {multiWidgets.length} Widgets Ready
+              </DialogTitle>
+              <DialogDescription>
+                AI will create one widget per pod. Review the list below.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="max-h-72 overflow-y-auto space-y-2">
+              {multiWidgets.map((w, i) => (
+                <div key={i} className="flex items-center gap-3 rounded-lg border px-4 py-2.5 text-sm">
+                  <Badge variant="secondary" className="shrink-0">{w.widgetType}</Badge>
+                  <span className="flex-1 truncate font-medium">{w.title}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{w.machine}</span>
+                </div>
+              ))}
+            </div>
+            <DialogFooter className="gap-2">
+              <Button onClick={handleConfirmMulti}>
+                <Check className="mr-2 h-4 w-4" />
+                Create {multiWidgets.length} Widgets
+              </Button>
+              <Button variant="ghost" onClick={() => handleReset()}>Cancel</Button>
+            </DialogFooter>
+          </>
+        )}
+
         {/* Step: Review */}
         {step === "review" && aiResult?.matched && (
           <>
@@ -556,9 +634,13 @@ export function AddWidgetModal({ dashboardId, onCreated, externalOpen, onExterna
               <Check className="h-6 w-6 text-green-600 dark:text-green-400" />
             </div>
             <div className="text-center">
-              <p className="text-lg font-semibold">Widget Added</p>
+              <p className="text-lg font-semibold">
+                {multiWidgets.length > 1 ? `${multiWidgets.length} Widgets Added` : "Widget Added"}
+              </p>
               <p className="text-sm text-muted-foreground">
-                Your widget has been added to the dashboard.
+                {multiWidgets.length > 1
+                  ? `${multiWidgets.length} widgets have been added to the dashboard.`
+                  : "Your widget has been added to the dashboard."}
               </p>
             </div>
             <Button onClick={handleDone}>Done</Button>

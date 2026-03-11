@@ -27,7 +27,9 @@ data:
 
     LAST_HEARTBEAT=0
     LAST_SYNC=0
+    LAST_SCRAPE=0
     LAST_RULES_HASH=""
+    SCRAPE_INTERVAL="${SCRAPE_INTERVAL:-30}"
 
     log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] noblinks-agent: $*"; }
 
@@ -155,13 +157,61 @@ data:
       fi
 
       labels_json=$(printf '%s' "$prom_response" \
-        | jq '[.data.result[].metric.name // empty] | unique' 2>/dev/null || echo "[]")
+        | jq '[.data.result[].metric | (.pod // .name // .container // .instance // .node // .namespace) | select(. != null and . != "")] | unique' 2>/dev/null || echo "[]")
 
       curl -sf --max-time 10 \
         -X POST "${NOBLINKS_URL}/api/agent/query-result" \
         -H "Authorization: Bearer ${AGENT_TOKEN}" \
         -H "Content-Type: application/json" \
         -d "{\"id\":\"${query_id}\",\"result\":${labels_json}}" > /dev/null || true
+    }
+
+    scrape_metrics() {
+      local config num_metrics i metric_key promql prom_response value
+      local samples_json first
+
+      config=$(curl -sf --max-time 10 \
+        "${NOBLINKS_URL}/api/agent/metrics-config" \
+        -H "Authorization: Bearer ${AGENT_TOKEN}" || true)
+
+      [ -z "$config" ] && { log "metrics-config fetch failed, skipping scrape"; return; }
+
+      num_metrics=$(printf '%s' "$config" | jq '.metrics | length' 2>/dev/null || echo 0)
+      [ "$num_metrics" -eq 0 ] && return
+
+      samples_json="["
+      first=true
+      i=0
+      while [ "$i" -lt "$num_metrics" ]; do
+        metric_key=$(printf '%s' "$config" | jq -r ".metrics[$i].key")
+        promql=$(printf '%s' "$config" | jq -r ".metrics[$i].promql")
+
+        prom_response=$(curl -sf --max-time 10 \
+          -G --data-urlencode "query=${promql}" \
+          "${PROMETHEUS_URL}/api/v1/query" || true)
+
+        if [ -n "$prom_response" ]; then
+          # Sum all result values → single scalar (handles both instant vectors and multi-row results)
+          value=$(printf '%s' "$prom_response" \
+            | jq '[.data.result[].value[1] | tonumber] | add // empty' 2>/dev/null || true)
+
+          if [ -n "$value" ] && [ "$value" != "null" ]; then
+            [ "$first" = "true" ] && first=false || samples_json="${samples_json},"
+            samples_json="${samples_json}{\"metric\":\"${metric_key}\",\"value\":${value}}"
+          fi
+        fi
+        i=$((i + 1))
+      done
+      samples_json="${samples_json}]"
+
+      [ "$first" = "true" ] && return  # nothing to post
+
+      curl -sf --max-time 10 \
+        -X POST "${NOBLINKS_URL}/api/agent/metrics" \
+        -H "Authorization: Bearer ${AGENT_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "{\"samples\":${samples_json}}" > /dev/null \
+        || log "failed to post metric samples"
     }
 
     poll_pending_queries() {
@@ -190,7 +240,9 @@ data:
     send_heartbeat
     LAST_HEARTBEAT=$(date +%s)
     sync_rules
+    scrape_metrics
     LAST_SYNC=$LAST_HEARTBEAT
+    LAST_SCRAPE=$LAST_HEARTBEAT
 
     while true; do
       sleep 5
@@ -203,5 +255,9 @@ data:
       if [ $((NOW - LAST_SYNC)) -ge "$SYNC_INTERVAL" ]; then
         sync_rules
         LAST_SYNC=$NOW
+      fi
+      if [ $((NOW - LAST_SCRAPE)) -ge "$SCRAPE_INTERVAL" ]; then
+        scrape_metrics
+        LAST_SCRAPE=$NOW
       fi
     done

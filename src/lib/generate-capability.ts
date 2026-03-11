@@ -99,6 +99,48 @@ Systemd service status (ONLY metric for "is X running / is X service up" queries
   Always use widgetType="stat" for service status — shows 1 (running) or 0 (stopped).
 `.trim();
 
+const KUBE_METRICS_CATALOG = `
+Available Kubernetes metrics you can reference in PromQL:
+
+Container memory (cAdvisor — from kubelet):
+  container_memory_usage_bytes{namespace="<ns>", pod!=""}
+  container_memory_working_set_bytes{namespace="<ns>", pod!=""}
+  container_memory_rss{namespace="<ns>", pod!=""}
+  container_memory_cache{namespace="<ns>", pod!=""}
+  NOTE: use pod!="" filter, NOT container!="" — many clusters (including minikube) report pod-level
+  metrics where the container label is empty/null.
+
+Container CPU (cAdvisor):
+  rate(container_cpu_usage_seconds_total{namespace="<ns>", pod!=""}[2m])
+
+Pod status (kube-state-metrics):
+  kube_pod_status_phase{namespace="<ns>", phase="Running|Pending|Failed|Succeeded|Unknown"}
+  kube_pod_container_status_restarts_total{namespace="<ns>"}
+  kube_pod_container_status_ready{namespace="<ns>"}
+  kube_pod_info{namespace="<ns>"}
+
+Deployment health:
+  kube_deployment_status_replicas{namespace="<ns>"}
+  kube_deployment_status_replicas_available{namespace="<ns>"}
+  kube_deployment_spec_replicas{namespace="<ns>"}
+
+Node metrics:
+  kube_node_status_condition{condition="Ready", status="true"}
+  kube_node_status_allocatable{resource="cpu|memory"}
+
+Resource requests/limits per pod:
+  kube_pod_container_resource_requests{resource="cpu|memory", namespace="<ns>"}
+  kube_pod_container_resource_limits{resource="cpu|memory", namespace="<ns>"}
+
+PVC storage:
+  kubelet_volume_stats_used_bytes{namespace="<ns>"}
+  kubelet_volume_stats_capacity_bytes{namespace="<ns>"}
+
+NAMESPACE FILTERING: Always filter by namespace using {namespace="<ns>"} when the user specifies one.
+MEMORY UNITS: container_memory_usage_bytes returns bytes. For MB: value / 1024 / 1024. Use sum by (pod)(...) for per-pod breakdown.
+CPU UNITS: rate(...[2m]) returns cores. Multiply by 1000 for millicores.
+`.trim();
+
 const GENERATION_SYSTEM_PROMPT = `You are a Prometheus monitoring expert. The user wants to monitor a Linux machine metric that does not have a pre-defined capability. Generate a new monitoring capability for it.
 
 ${NODE_EXPORTER_CATALOG}
@@ -115,6 +157,35 @@ RULES:
 5. metric is the snake_case key we store (does not have to match a real Prometheus metric name).
 6. Pick widgetType thoughtfully: timeseries for trends, stat for current value, bar for comparisons.
 7. Extract the machine name from the user prompt if present.`;
+
+const KUBE_GENERATION_SYSTEM_PROMPT = `You are a Prometheus monitoring expert. The user wants to monitor a Kubernetes cluster metric. Generate a new monitoring capability using kube-state-metrics and cAdvisor metrics.
+
+${KUBE_METRICS_CATALOG}
+
+RULES:
+1. Use ONLY metrics from the catalog above. Do not invent metric names.
+2. scrapeQuery MUST return a single scalar number. The agent sums all result rows — always wrap in sum(...) or avg(...).
+   - Memory for all pods in namespace X: sum(container_memory_usage_bytes{namespace="X", pod!=""}) / 1024 / 1024
+   - Memory for a specific pod: sum(container_memory_usage_bytes{pod="podname"}) / 1024 / 1024
+   - CPU for all pods: sum(rate(container_cpu_usage_seconds_total{namespace="X", pod!=""}[2m])) * 1000
+   - Pod count: count(kube_pod_info{namespace="X"})
+   - For per-pod widget (__POD__ placeholder): sum(container_memory_usage_bytes{pod="__POD__"}) / 1024 / 1024
+   - CRITICAL: NEVER use container!="" or container!="POD" — use pod!="" instead
+3. alertTemplate uses $machine (cluster name), $threshold, $window as placeholders.
+4. capabilityKey must be snake_case, start with kubernetes_ prefix, be unique and descriptive.
+5. metric is the snake_case key we store (does not have to match a real Prometheus metric name).
+6. Pick widgetType thoughtfully:
+   - timeseries: use for ALL per-pod metrics with __POD__ placeholder (memory trend, CPU trend per pod)
+   - timeseries: also for aggregate trends (total memory, total CPU over time)
+   - stat: single current value (total pod count, node count, single pod current memory)
+   - bar: comparison across namespaces or deployments
+   - NEVER use toplist — per-pod data is shown via individual timeseries widgets, one per pod
+7. Namespace filtering:
+   - If the user mentions a specific namespace, filter by it: {namespace="X"}
+   - If the user mentions a specific pod name but NO namespace, do NOT add a namespace filter — the pod name alone is sufficient. Example: sum(container_memory_usage_bytes{pod="mypod", container!="", container!="POD"}) / 1024 / 1024
+   - NEVER use the machine/cluster name (e.g. "minikube") as a namespace unless the user explicitly says "minikube namespace"
+8. Always set category to "kubernetes".
+9. For per-pod metrics (when user says "each pod", "all pods", "per pod"): use __POD__ as the pod name placeholder in scrapeQuery and alertTemplate. Always wrap in sum(...) to guarantee a scalar. Example: sum(container_memory_usage_bytes{pod="__POD__"}) / 1024 / 1024`;
 
 // ── Step 1 schema: does the AI need real-time machine data? ───────────────────
 
@@ -153,13 +224,28 @@ Set needsQuery=false ONLY for:
 When needsQuery=true, set promql to: node_systemd_unit_state{state="active"} == 1
 This returns all active systemd services so you can find the exact unit name.`;
 
+const KUBE_NEEDS_QUERY_SYSTEM_PROMPT = `You are a Prometheus monitoring expert deciding whether generating a Kubernetes monitoring capability requires querying the cluster first.
+
+Set needsQuery=true ONLY when:
+- The user asks about a specific named deployment, service, or pod whose exact name you cannot know (e.g. "is my-app deployment healthy")
+- The user asks about a namespace that is non-standard and you need to verify it exists
+
+Set needsQuery=false for:
+- Standard metrics filtered by namespace: memory usage, CPU usage, pod counts, restart counts
+- Node-level metrics (CPU, memory allocatable/capacity)
+- Generic "all pods in namespace X" requests — namespace is known from the prompt
+
+When needsQuery=true, set promql to: kube_pod_info{namespace="<ns>"}
+This returns pod info so you can verify the namespace and get pod names.`;
+
 // ── Main function ─────────────────────────────────────────────────────────────
 
 export async function generateCapability(
   prompt: string,
-  machineContext?: { orgId: string; machineName: string } | null
+  machineContext?: { orgId: string; machineName: string; category?: string | null } | null
 ): Promise<GeneratedCapability | null> {
-  let systemPrompt = GENERATION_SYSTEM_PROMPT;
+  const isKubernetes = machineContext?.category === "kubernetes";
+  let systemPrompt = isKubernetes ? KUBE_GENERATION_SYSTEM_PROMPT : GENERATION_SYSTEM_PROMPT;
 
   // Step 1: ask the AI if it needs real-time data before it can generate correctly
   if (machineContext) {
@@ -168,7 +254,7 @@ export async function generateCapability(
       const step1 = await generateObject({
         model: getAIModel(),
         schema: needsQuerySchema,
-        system: NEEDS_QUERY_SYSTEM_PROMPT,
+        system: isKubernetes ? KUBE_NEEDS_QUERY_SYSTEM_PROMPT : NEEDS_QUERY_SYSTEM_PROMPT,
         prompt,
       });
       needsQueryResult = step1.object;
@@ -213,7 +299,20 @@ export async function generateCapability(
       system: systemPrompt,
       prompt,
     });
-    return result.object;
+
+    const cap = result.object;
+
+    // Sanitize Kubernetes scrapeQuery — replace container!="" / container!="POD" with pod!=""
+    // Many clusters (minikube) expose pod-level cAdvisor metrics without container labels.
+    if (cap.category === "kubernetes") {
+      cap.scrapeQuery = cap.scrapeQuery
+        .replace(/,?\s*container!="",?\s*container!="POD"/g, ', pod!=""')
+        .replace(/,?\s*container!="POD",?\s*container!=""/g, ', pod!=""')
+        .replace(/,?\s*container!=""/g, ', pod!=""')
+        .replace(/,?\s*container!="POD"/g, '');
+    }
+
+    return cap;
   } catch (err) {
     console.error("generateCapability failed:", err);
     return null;

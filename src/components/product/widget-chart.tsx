@@ -12,7 +12,7 @@ import type { DbWidget } from "@/lib/types";
 const PH_TIMESERIES = Array.from({ length: 20 }, (_, i) => ({ t: i, v: null as number | null }));
 const PH_BAR     = [{ name: "a", v: 72 }, { name: "b", v: 45 }, { name: "c", v: 88 }, { name: "d", v: 33 }, { name: "e", v: 61 }];
 const PH_PIE     = [{ name: "A", value: 45 }, { name: "B", value: 30 }, { name: "C", value: 15 }, { name: "D", value: 10 }];
-const PH_TOPLIST = [{ name: "process-1", v: 88 }, { name: "process-2", v: 61 }, { name: "process-3", v: 45 }, { name: "process-4", v: 33 }, { name: "process-5", v: 12 }];
+
 
 const TOOLTIP_STYLE = {
   backgroundColor: "hsl(var(--popover))",
@@ -171,24 +171,8 @@ function PieChartWidget({ points }: { points: DataPoint[] }) {
 }
 
 function ToplistChart({ points }: { points: DataPoint[] }) {
-  const hasData = points.length > 0;
-  const data = hasData
-    ? points.slice(-5).map((p, i) => ({ name: `t-${i + 1}`, v: p.v }))
-    : PH_TOPLIST;
-
-  return (
-    <div className="relative h-32">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} layout="vertical" margin={{ top: 4, right: 8, left: 56, bottom: 0 }}>
-          <XAxis type="number" domain={[0, 100]} tickCount={3} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
-          <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} width={52} />
-          <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [typeof v === "number" ? `${v.toFixed(1)}%` : v, ""]} />
-          <Bar dataKey="v" fill="hsl(var(--primary))" fillOpacity={hasData ? 0.7 : 0.2} radius={[0, 3, 3, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-      {!hasData && NO_DATA_OVERLAY}
-    </div>
-  );
+  // Toplist for a single-pod scalar: show timeseries trend instead of meaningless bars
+  return <TimeseriesChart id="toplist" points={points} />;
 }
 
 function StatWidget({ points }: { points: DataPoint[] }) {

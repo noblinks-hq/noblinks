@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   Server,
   AlertTriangle,
+  MessageSquare,
   Bot,
   Settings,
   Menu,
@@ -37,6 +38,7 @@ const navItems = [
   { href: "/dashboards", label: "Dashboards", icon: LayoutGrid },
   { href: "/machines", label: "Infrastructure", icon: Server },
   { href: "/alerts", label: "Alerts", icon: AlertTriangle },
+  { href: "/cluster-chat", label: "Cluster Chat", icon: MessageSquare },
 ];
 
 function isActive(pathname: string, href: string) {
