@@ -9,6 +9,7 @@ CREATE TABLE "lens_analysis" (
 	"match_results" jsonb,
 	"rule_violations" jsonb,
 	"scoring_result" jsonb,
+	"compliance_flags" jsonb,
 	"report" jsonb,
 	"error_message" text,
 	"created_at" timestamp DEFAULT now() NOT NULL,

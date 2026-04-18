@@ -1,13 +1,13 @@
 import { requireApiAuth } from "@/lib/session";
-import { lensDb } from "@/lib/lens/db";
-import { lensAnalysis } from "@/lib/lens/schema";
+import { db } from "@/lib/db";
+import { lensAnalysis } from "@/lib/schema";
 import { eq, desc } from "drizzle-orm";
 
 export async function GET() {
   const { session, error } = await requireApiAuth();
   if (error) return error;
 
-  const records = await lensDb
+  const records = await db
     .select({
       id: lensAnalysis.id,
       targetCloud: lensAnalysis.targetCloud,

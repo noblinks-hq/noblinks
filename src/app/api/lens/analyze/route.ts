@@ -93,8 +93,8 @@ import { CloudWatchLogsClient, DescribeLogGroupsCommand } from "@aws-sdk/client-
 import { KendraClient, ListIndicesCommand } from "@aws-sdk/client-kendra";
 import { requireApiAuth } from "@/lib/session";
 import { getOrgLensPlan, type LensPlan } from "@/lib/plan";
-import { lensDb } from "@/lib/lens/db";
-import { lensAnalysis } from "@/lib/lens/schema";
+import { db } from "@/lib/db";
+import { lensAnalysis } from "@/lib/schema";
 import { runComplianceEngine } from "@/lib/lens/compliance-engine";
 import { eq, and, gte, count } from "drizzle-orm";
 
@@ -2721,7 +2721,7 @@ export async function POST(request: Request) {
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
-  const usageRows = await lensDb
+  const usageRows = await db
     .select({ value: count() })
     .from(lensAnalysis)
     .where(and(eq(lensAnalysis.organizationId, organizationId), gte(lensAnalysis.createdAt, startOfMonth)));
@@ -2733,7 +2733,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const [record] = await lensDb
+  const [record] = await db
     .insert(lensAnalysis)
     .values({ userId, organizationId, targetCloud, inputMethod, status: "running" })
     .returning({ id: lensAnalysis.id });
@@ -2761,7 +2761,7 @@ export async function POST(request: Request) {
       const enrichedResults = await addAiMappings(results, targetCloud);
       const complianceFlags = runComplianceEngine(Object.keys(model));
 
-      await lensDb
+      await db
         .update(lensAnalysis)
         .set({
           status: "complete",
@@ -2773,7 +2773,7 @@ export async function POST(request: Request) {
         })
         .where(eq(lensAnalysis.id, analysisId));
     } catch (err) {
-      await lensDb
+      await db
         .update(lensAnalysis)
         .set({ status: "failed", errorMessage: err instanceof Error ? err.message : "Unknown error" })
         .where(eq(lensAnalysis.id, analysisId));
