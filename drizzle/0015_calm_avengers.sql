@@ -1,4 +1,4 @@
-CREATE TABLE "lens_analysis" (
+CREATE TABLE IF NOT EXISTS "lens_analysis" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
 	"organization_id" text NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE "lens_analysis" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "lens_iam_setup" (
+CREATE TABLE IF NOT EXISTS "lens_iam_setup" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
 	"external_id" text NOT NULL,
@@ -26,7 +26,7 @@ CREATE TABLE "lens_iam_setup" (
 	CONSTRAINT "lens_iam_setup_external_id_unique" UNIQUE("external_id")
 );
 --> statement-breakpoint
-CREATE INDEX "lens_analysis_user_id_idx" ON "lens_analysis" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "lens_analysis_org_id_idx" ON "lens_analysis" USING btree ("organization_id");--> statement-breakpoint
-CREATE INDEX "lens_analysis_status_idx" ON "lens_analysis" USING btree ("status");--> statement-breakpoint
-CREATE INDEX "lens_iam_user_id_idx" ON "lens_iam_setup" USING btree ("user_id");
+CREATE INDEX IF NOT EXISTS "lens_analysis_user_id_idx" ON "lens_analysis" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "lens_analysis_org_id_idx" ON "lens_analysis" USING btree ("organization_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "lens_analysis_status_idx" ON "lens_analysis" USING btree ("status");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "lens_iam_user_id_idx" ON "lens_iam_setup" USING btree ("user_id");
