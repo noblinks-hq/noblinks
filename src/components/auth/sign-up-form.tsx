@@ -38,13 +38,13 @@ export function SignUpForm() {
         name,
         email,
         password,
-        callbackURL: "/overview",
+        callbackURL: "/lens",
       })
 
       if (result.error) {
         setError(result.error.message || "Failed to create account")
       } else {
-        router.push("/overview")
+        router.push("/lens")
         router.refresh()
       }
     } catch {

@@ -1,0 +1,1479 @@
+# Noblinks Lens — Implementation Plan
+# Multi-Cloud → EU Sovereign Cloud Compatibility Analysis
+# Last updated: April 2026
+
+---
+
+## Core Truth
+
+Lens answers one question — the question every CEO and CTO is asking:
+
+> "Are we ready to migrate to an EU sovereign cloud?"
+
+The answer is always one of four:
+
+  ✅  Yes — migrate now.
+      Score ≥ 90%, compliance clear, workarounds exist for remaining gaps.
+
+  ⏳  Not yet — wait N months.
+      Key blockers have announced EU equivalents arriving on a known timeline.
+      We will alert you when the window opens.
+
+  🔧  Not without changes — here's what needs to change.
+      Critical services have no EU equivalent and no announced roadmap.
+      Re-architecture is required before migration is viable.
+
+  👀  Watching — you've set a threshold. We're monitoring the ecosystem.
+      When your conditions are met, you'll be the first to know.
+
+Everything Lens does — scanning, scoring, cataloguing, forecasting,
+alerting — exists to produce one of these four answers, with the evidence
+to back it up.
+
+Lens is NOT a migration tool. It never touches production. It never
+executes anything. It only reads, analyses, and watches.
+
+AI explains. Noblinks Lens proves.
+
+See: `specs/lens/ai clarification` for mandatory design constraints.
+
+## Product Suite Context
+
+Lens is the first product in a three-product suite:
+
+  Lens   → `specs/lens/implementation plan`   (this file)
+           "Are you ready to migrate?"
+           Detects services, scores compatibility, flags compliance risks.
+
+  Glance → `specs/glance/implementation plan`
+           "What do I have and how does it all connect?"
+           Full inventory + dependency graph + migration wave sequencing.
+           Feeds into Guide as a structured blueprint export.
+
+  Guide  → `specs/guide/implementation plan`
+           "Here is your Hetzner blueprint. Let me walk you through building it."
+           Blueprint generator + static migration guides + AI agent
+           that guides the user step-by-step through creating infra on Hetzner,
+           using the Hetzner API with an approval gate for every write action.
+
+The output of Lens (compatibility score + compliance flags) feeds into Glance
+and Guide. The output of Glance (dependency graph + migration waves) is the
+primary input to Guide's blueprint generator.
+
+---
+
+## Market Context (April 2026)
+
+A Brussels think tank (reported Euronews, 17 Apr 2026) found that 16 EU
+countries have defence agencies directly exposed to US cloud providers.
+7 more use European contractors that themselves depend on US infrastructure.
+Microsoft already exercised a real kill switch in 2025 — blocking ICC
+prosecutor accounts after US sanctions. This is no longer a theoretical risk.
+
+Key legal mechanism: the US CLOUD Act allows the US government to compel
+data access from any US-incorporated cloud provider regardless of where
+data is physically stored. "Sovereign cloud" offerings from AWS, Azure, and
+GCP (EU regions, sovereign zones) do NOT protect against this — experts call
+it "sovereign-washing." Software updates can be blocked under sanctions even
+if data stays in Europe.
+
+This validates Noblinks Lens's target cloud list (EU-owned providers only)
+and makes the compliance engine a primary product differentiator, not a
+secondary feature. Target customers include not just cost-conscious startups
+but defence agencies, public sector bodies, critical infrastructure operators,
+and any company subject to NIS2 or handling sensitive EU citizen data.
+
+---
+
+## How It Works (Concrete Example)
+
+**Scenario:** Customer runs on AWS (us-east-1), evaluating all EU options.
+
+1. Customer connects AWS via read-only IAM role (or uploads IaC files)
+2. Lens discovers: EC2, RDS Postgres, S3, Lambda, Cognito, SQS, CloudFront
+3. Lens maps each service to an abstract capability:
+   - RDS Postgres → `database.postgresql`
+   - Lambda → `compute.function`
+   - Cognito → `identity.managed`
+4. Lens looks up each capability across all 7 EU cloud catalogs:
+   - Hetzner: compute 100%, no serverless, no managed identity → 41%
+   - OVHcloud: compute 100%, managed DB, no serverless → 58%
+   - Scaleway: compute 100%, Serverless Functions (partial), no managed identity → 52%
+   - etc.
+5. Report: ranked EU cloud scores + per-service mapping + AI-written migration notes
+
+**Key invariant:** The catalog is the core IP. Match types, scores, and
+equivalence decisions are deterministic and human-curated. AI only writes
+the plain-English explanations layered on top.
+
+---
+
+## Source Clouds (Input — what customers run on)
+
+- **AWS** — IAM role / Terraform / Helm / CLI export ✅ DETECTION BUILT
+- **GCP** — Service Account JSON / Terraform
+- **Azure** — App Registration credentials / Terraform / ARM templates
+
+## Target Clouds (Output — what we evaluate against)
+
+These are EU-incorporated providers, NOT US cloud EU regions.
+US provider "sovereign cloud" offerings (AWS EU Sovereign, Azure EU Data
+Boundary, Google Sovereign via T-Systems) are explicitly excluded — they
+do not protect against the CLOUD Act (see Market Context above).
+
+- **Hetzner Cloud** 🇩🇪 — IaaS-focused, strong compute/storage, lowest cost
+- **OVHcloud** 🇫🇷 — Broader managed catalogue, French sovereign cloud
+- **Scaleway** 🇫🇷 — Developer-friendly, growing managed services
+- **IONOS Cloud** 🇩🇪 — German compliance focus, S3-compatible storage
+- **Exoscale** 🇨🇭 — Swiss privacy laws, OpenStack-based
+- **UpCloud** 🇫🇮 — Nordic cloud, managed databases, managed Kubernetes
+- **Open Telekom Cloud** 🇩🇪 — T-Systems / Deutsche Telekom, OpenStack, enterprise
+
+---
+
+## Pipeline
+
+```
+Customer Input
+  (IAM role / Service Account / App Registration / IaC files / manual)
+        ↓
+Source Cloud Detector
+  (AWS SDK / GCP API / Azure ARM → per-cloud discovery functions)
+        ↓
+Canonical Architecture Model
+  (unified internal representation, cloud-agnostic)
+        ↓
+Capability Mapper
+  (vendor service → abstract capability key e.g. "compute.function")
+        ↓
+Compatibility Engine
+  (capability key → lookup in each of 7 EU cloud catalogs)
+        ↓
+Rule Engine
+  (structural risks: SaaS lock-in, region hardcoding, proprietary features)
+        ↓
+Compliance Engine         ← NEW
+  (GDPR / Schrems II / EU AI Act flags, deterministic, region + service type)
+        ↓
+Cost Estimation Engine    ← NEW
+  (public pricing data per EU cloud → monthly savings vs current cloud spend)
+        ↓
+Scoring Engine
+  (weighted per-cloud compatibility scores → ranked EU cloud table)
+        ↓
+AI Layer
+  (summaries, plain-English explanations, migration step phrasing only)
+        ↓
+Report
+  (structured JSON + human-readable, stored in DB)
+        ↓
+PDF Export                ← NEW
+  (branded, shareable, board-ready report)
+```
+
+---
+
+## PHASE 1 — Data Model & Catalog Foundation
+
+### 1.1 — TypeScript types
+
+- [ ] Define `SourceCloud` type:
+  ```ts
+  type SourceCloud = "aws" | "gcp" | "azure"
+  ```
+
+- [ ] Define `TargetCloud` type:
+  ```ts
+  type TargetCloud =
+    | "hetzner"
+    | "ovhcloud"
+    | "scaleway"
+    | "ionos"
+    | "exoscale"
+    | "upcloud"
+    | "open_telekom"
+  ```
+
+- [ ] Define `InputMethod` type:
+  ```ts
+  type InputMethod = "iam_role" | "service_account" | "app_registration"
+    | "terraform" | "kubernetes" | "helm" | "cli_export" | "manual"
+  ```
+
+- [ ] Define `ArchitectureService` type:
+  ```ts
+  {
+    id: string
+    capability: string          // e.g. "database.postgresql"
+    sourceCloud: SourceCloud
+    rawService: string          // e.g. "rds", "cloudsql", "azure_sql"
+    region: string
+    stateful: boolean
+    criticality: "high" | "medium" | "low"
+    config: Record<string, unknown>
+    dependencies: string[]
+  }
+  ```
+
+- [ ] Define `CatalogEntry` type:
+  ```ts
+  {
+    match: "compatible" | "partial" | "none"
+    equivalent: string | null
+    notes: string
+    migrationEffort: "low" | "medium" | "high"
+    migrationNotes: string[]
+    docs?: string
+    weight: number
+  }
+  ```
+
+- [ ] Define `MatchResult` type (per-service, per-target-cloud):
+  ```ts
+  {
+    service: string
+    capability: string
+    targetCloud: TargetCloud
+    match: "compatible" | "partial" | "none"
+    hetznerEquivalent: string   // keep field name generic: "equivalent"
+    notes: string
+    migrationEffort: "low" | "medium" | "high"
+    migrationNotes: string[]
+    docs?: string
+    weight: number
+    count: number
+    resources: Resource[]
+    aiMapping?: string          // AI-written explanation, layered on top only
+  }
+  ```
+
+- [ ] Define `ScoringResult` type:
+  ```ts
+  {
+    clouds: { cloud: TargetCloud; score: number }[]
+    bestFit: TargetCloud
+    totalServices: number
+    overallPortability: "high" | "medium" | "low"
+  }
+  ```
+
+### 1.2 — Catalog architecture
+
+The catalog is the core IP. It is human-curated, not AI-generated.
+
+Current state: single `HETZNER_CATALOG` object inline in `analyze/route.ts`
+Target state: `src/lib/lens/catalog/` directory with one file per target cloud
+
+Structure:
+```
+src/lib/lens/catalog/
+  index.ts          — exports CATALOG: Record<TargetCloud, CloudCatalog>
+  hetzner.ts        — ✅ exists (needs extraction from route.ts)
+  ovhcloud.ts       — to build
+  scaleway.ts       — to build
+  ionos.ts          — to build
+  exoscale.ts       — to build
+  upcloud.ts        — to build
+  open_telekom.ts   — to build
+```
+
+Each catalog file maps service keys (e.g. `"ec2"`, `"lambda"`, `"cloudsql"`)
+to `CatalogEntry`. The 91 AWS service keys currently in HETZNER_CATALOG become
+the baseline. GCP and Azure services get their own keys.
+
+- [x] Hetzner catalog: 91 AWS service entries (inline in route.ts)
+- [ ] Extract HETZNER_CATALOG to `src/lib/lens/catalog/hetzner.ts`
+- [ ] Build OVHcloud catalog (91 AWS + ~50 GCP + ~50 Azure entries)
+- [ ] Build Scaleway catalog
+- [ ] Build IONOS catalog
+- [ ] Build Exoscale catalog
+- [ ] Build UpCloud catalog
+- [ ] Build Open Telekom Cloud catalog
+
+Catalog entry quality standard:
+  - All match types (compatible/partial/none) must be verified against
+    the target cloud's public documentation — not inferred by AI
+  - Docs links must be tested before commit
+  - Migration notes must reflect real constraints (SLA differences,
+    missing features, API incompatibilities)
+
+### 1.3 — EU cloud public API sync (optional, long term)
+
+- [ ] Hetzner: `GET https://api.hetzner.cloud/v1/server_types` (no auth)
+      → enrich compute.vm catalog entries with real server type data
+- [ ] OVHcloud: public catalog API
+- [ ] Run as weekly background job to keep server type/price data fresh
+
+### 1.4 — Database schema
+
+- [x] `lensAnalysis` table in `src/lib/lens/schema.ts`
+- [x] Separate lensDb on port 5433
+- [x] Migrations applied
+- [ ] Add `sourceCloud` column (currently implicit as "aws")
+- [ ] Update `matchResults` JSONB to include `targetCloud` per result
+  (currently one result set; needs to support 7 clouds × N services)
+- [ ] Add `scoringResult.clouds[]` array for multi-cloud ranked scores
+
+---
+
+## PHASE 2 — Input Methods (Discovery)
+
+### 2.1 — AWS Detection ✅ LARGELY DONE
+
+- [x] IAM role assumption via STS AssumeRoleCommand
+- [x] 91 services detected in parallel via Promise.all (all fail-silent)
+- [x] enumerateServices() in `src/app/api/lens/analyze/route.ts`
+
+Services covered (91 total):
+  Compute: ec2, lambda, ecs, eks, ecr, batch, apprunner, elasticbeanstalk,
+           lightsail, autoscaling
+  Storage: s3, efs, fsx, backup
+  Database: rds, dynamodb, elasticache, redshift, docdb, neptune, memorydb,
+            opensearch, keyspaces, timestream
+  Networking: vpc, elb, cloudfront, route53, globalaccelerator, directconnect,
+              privatelink, networkfirewall, waf
+  Security: kms, acm, guardduty, secretsmanager, cognito, shield, cloudtrail,
+            config, securityhub, macie, inspector, identitycenter, directoryservice
+  Messaging: sqs, sns, eventbridge, kinesis, firehose, mq, msk, stepfunctions
+  API: apigateway, apigatewayv2, appsync
+  DevTools: codebuild, codepipeline, codecommit, codedeploy, codeartifact,
+            cloudformation
+  Monitoring: cloudwatch, cloudwatchlogs, ssm, xray
+  Analytics: athena, glue, emr
+  AI/ML: sagemaker, bedrock, rekognition, comprehend, textract, transcribe,
+         translate, lex, kendra
+  Transfer: transfer
+  IoT: iot, iotanalytics, iotevents, iotsitewise, greengrass
+  Contact: ses, connect, pinpoint
+  Other: amplify, organizations, licensemanager
+
+Remaining for AWS:
+- [ ] Terraform HCL parser (for IaC customers)
+- [ ] Helm / Kubernetes YAML parser
+- [ ] CLI export script (`npx @noblinks/lens-export`)
+- [ ] Manual inventory input
+
+### 2.2 — GCP Detection (to build)
+
+Credentials: Service Account JSON key (uploaded or pasted)
+SDK: `@google-cloud/*` packages
+
+Services to detect (~50):
+  Compute: compute_engine (VMs), gke (Kubernetes), cloud_run, cloud_functions,
+           app_engine, batch (Cloud Batch)
+  Storage: cloud_storage (GCS), persistent_disk, filestore, cloud_backup
+  Database: cloud_sql, cloud_spanner, bigtable, firestore, memorystore,
+            alloydb, bigquery
+  Networking: vpc, cloud_load_balancing, cloud_cdn, cloud_dns, cloud_armor,
+              cloud_interconnect, cloud_nat
+  Messaging: pubsub, cloud_tasks, cloud_scheduler, eventarc
+  Security: cloud_kms, secret_manager, cloud_iam, certificate_manager,
+            cloud_identity, beyondcorp
+  Monitoring: cloud_monitoring, cloud_logging, cloud_trace, cloud_profiler
+  Analytics: bigquery, dataflow, dataproc, looker, data_catalog
+  AI/ML: vertex_ai, vision_api, natural_language, speech_to_text, translate,
+         document_ai, recommendations_ai
+  DevOps: cloud_build, artifact_registry, container_registry, cloud_deploy
+  Other: apigee, firebase, cloud_composer, workflows
+
+- [ ] Create `src/lib/lens/detectors/gcp.ts`
+- [ ] Credential input UI (Service Account JSON paste/upload in analyze form)
+- [ ] Parallel detection function matching AWS pattern
+- [ ] Add GCP service keys to all 7 target cloud catalogs
+
+### 2.3 — Azure Detection (to build)
+
+Credentials: App Registration (Tenant ID, Client ID, Client Secret,
+             Subscription ID)
+SDK: `@azure/arm-*` packages
+
+Services to detect (~50):
+  Compute: virtual_machines, aks, container_instances, app_service,
+           functions, azure_batch, service_fabric
+  Storage: blob_storage, azure_files, disk_storage, data_lake_storage
+  Database: azure_sql, cosmos_db, azure_postgresql, azure_mysql,
+            azure_redis, azure_synapse, table_storage
+  Networking: virtual_network, load_balancer, application_gateway,
+              azure_cdn, azure_dns, expressroute, azure_firewall, front_door
+  Messaging: service_bus, event_hub, event_grid, storage_queue
+  Security: key_vault, azure_ad, defender_for_cloud, sentinel,
+            azure_ddos_protection
+  Monitoring: azure_monitor, log_analytics, application_insights
+  Analytics: synapse_analytics, azure_databricks, hdinsight, stream_analytics,
+             power_bi_embedded
+  AI/ML: azure_openai, cognitive_services, azure_ml, bot_service,
+         form_recognizer, azure_search
+  DevOps: azure_devops_pipelines, container_registry, artifacts
+  Other: api_management, logic_apps, azure_spring_apps, azure_arc
+
+- [ ] Create `src/lib/lens/detectors/azure.ts`
+- [ ] Credential input UI (4-field form in analyze step 2)
+- [ ] Parallel detection function matching AWS pattern
+- [ ] Add Azure service keys to all 7 target cloud catalogs
+
+### 2.4 — Input router
+
+- [ ] Create `src/lib/lens/detectors/index.ts`
+- [ ] Route to correct detector based on `sourceCloud` field
+- [ ] Unified output: `CanonicalModel` regardless of source cloud
+
+---
+
+## PHASE 3 — Compatibility Engine (Multi-Cloud)
+
+Current state: single-target (Hetzner) scoring inline in `analyze/route.ts`
+Target state: score against all 7 EU clouds in one pass, return ranked results
+
+- [ ] Extract scoring to `src/lib/lens/scoring-engine.ts`
+- [ ] For each detected service: look up in all 7 catalogs simultaneously
+- [ ] Return `ScoringResult.clouds[]` array sorted by score descending
+- [ ] Rule violation penalties: critical=−5pts, warning=−2pts
+- [ ] Portability bands: high ≥80, medium ≥50, low <50
+
+---
+
+## PHASE 4 — Rule Engine
+
+- [ ] Create `src/lib/lens/rule-engine.ts`
+- [ ] US-only SaaS lock-in detection (Auth0, Datadog, PagerDuty, Stripe)
+- [ ] Proprietary feature flags (Aurora Serverless, Lambda@Edge, RDS Proxy)
+- [ ] CloudFront as sole CDN (critical for Hetzner/Scaleway targets)
+- [ ] Cognito with custom domain
+- [ ] CloudWatch as sole observability
+- [ ] GPU / FPGA instance families (not available on most EU clouds)
+- [ ] VPC PrivateLink dependencies
+- [ ] Works across all 3 source clouds
+
+---
+
+## PHASE 5 — AI Layer
+
+Per `specs/lens/ai clarification`:
+- AI runs AFTER all deterministic scoring is complete
+- AI does NOT change match types, scores, or equivalence decisions
+- AI output is clearly labelled as AI-generated in the UI
+
+- [x] `aiMapping` per service: Claude generates plain-English migration steps
+      specific to the customer's actual detected resources
+- [ ] Create `src/lib/lens/ai-reporter.ts`
+- [ ] Executive summary (3–4 sentences: best-fit cloud, top blockers, effort)
+- [ ] Per-service explanation for partial/none matches
+- [ ] Rule violation explanations
+- [ ] Priority ranking by (criticality × effort)
+- [ ] Target: Anthropic claude-haiku-4-5 (fast, cheap, good enough for summaries)
+
+---
+
+## PHASE 6 — UI Updates
+
+### Analyze form (`/lens/analyze`)
+
+- [x] Target cloud picker (currently shows only Hetzner)
+- [ ] Update target cloud picker to show all 7 EU clouds (selectable)
+- [ ] Add source cloud picker: AWS / GCP / Azure
+- [ ] Credential forms per source cloud:
+  - AWS: IAM Role ARN (existing) ✅
+  - GCP: Service Account JSON paste/upload
+  - Azure: Tenant ID + Client ID + Client Secret + Subscription ID
+- [ ] Update step labels to reflect source cloud
+
+### Report page (`/lens/reports/[id]`)
+
+- [x] Score ring + service breakdown (single target cloud)
+- [ ] Multi-cloud score comparison: ranked table of all 7 EU clouds
+      (e.g. OVHcloud 71% > Scaleway 63% > Hetzner 41%)
+- [ ] "Best fit" highlight with rationale
+- [ ] Per-service cards: show mapping for selected target cloud
+      (tab or dropdown to switch target cloud within same report)
+- [ ] AI executive summary section (currently missing)
+- [ ] Rule violations panel
+
+### Reports list (`/lens/reports`)
+
+- [x] Grouped by day, collapsible, shows source → target
+- [ ] Show source cloud badge (AWS/GCP/Azure) alongside target cloud
+- [ ] Show best-fit cloud score when multi-cloud results available
+
+---
+
+## PHASE 7 — Schema & API Updates
+
+- [ ] Add `sourceCloud: "aws" | "gcp" | "azure"` to `lensAnalysis`
+- [ ] Update `matchResults` JSONB: store results for all 7 target clouds
+- [ ] Update `scoringResult` JSONB: store ranked array for all 7 clouds
+- [ ] Update `GET /api/lens/reports/[id]` to return multi-cloud results
+- [ ] Update `POST /api/lens/analyze` to accept `sourceCloud` param
+- [ ] Update `POST /api/lens/test-role` → generalise to `test-credentials`
+      with source cloud param
+
+---
+
+## PHASE 8 — Commercial Features (Sales-Critical)
+
+These three features are what turn a technically interesting product into one
+that closes deals. Build before launch, not after.
+
+### 8.1 — Cost Savings Estimate
+
+**Why it sells:** CFOs approve migrations. A euro figure gets a meeting;
+a compatibility % does not.
+
+**How it works (deterministic):**
+- Fetch public pricing for all 7 EU clouds (no auth required, public APIs/pages)
+- Map detected service types to equivalent EU cloud SKUs
+- Compute estimated monthly cost on each EU cloud
+- Show delta vs estimated current cloud spend (AWS/GCP/Azure public pricing)
+
+Data sources (all public, no auth):
+  - Hetzner: `https://api.hetzner.cloud/v1/pricing`
+  - OVHcloud: OVH public pricing API
+  - Scaleway: Scaleway pricing page / public API
+  - AWS: AWS Pricing API (for source cost estimation)
+  - GCP: Cloud Billing catalog API
+  - Azure: Azure Retail Prices API
+
+Output in report:
+  - "Migrating to Hetzner would cost ~€4,200/month vs your current ~€11,800/month"
+  - "Estimated saving: €7,600/month (64%)"
+  - Per-service cost breakdown table
+  - Caveat: estimates based on list pricing, actual costs may vary
+
+Implementation:
+- [ ] Create `src/lib/lens/pricing/` directory
+- [ ] `src/lib/lens/pricing/hetzner.ts` — fetch + parse Hetzner pricing API
+- [ ] `src/lib/lens/pricing/ovhcloud.ts`
+- [ ] `src/lib/lens/pricing/scaleway.ts`
+- [ ] `src/lib/lens/pricing/ionos.ts`
+- [ ] `src/lib/lens/pricing/exoscale.ts`
+- [ ] `src/lib/lens/pricing/upcloud.ts`
+- [ ] `src/lib/lens/pricing/open_telekom.ts`
+- [ ] `src/lib/lens/pricing/aws.ts` — source cloud cost estimation
+- [ ] `src/lib/lens/pricing/index.ts` — unified estimator
+- [ ] Cache pricing data in DB (refresh weekly via cron)
+- [ ] Add `costEstimate` field to `lensAnalysis` schema
+- [ ] Add cost comparison section to report UI
+- [ ] Show savings prominently on report header (e.g. "Save up to €7,600/mo")
+
+### 8.2 — PDF Export
+
+**Why it sells:** Enterprise buyers cannot purchase what they cannot present.
+A board-ready PDF is table stakes for B2B sales. Customers need to attach
+the report to a Slack message, email it to their CTO, or print it for a
+compliance review.
+
+**What the PDF contains:**
+- Cover page: company name (if provided), date, source cloud, best-fit EU cloud
+- Executive summary (AI-written, 3–4 sentences)
+- Ranked EU cloud comparison table with scores and savings estimates
+- Compliance flags section
+- Per-service breakdown (compatible / partial / no match)
+- Migration effort summary
+- Noblinks branding + "Generated by Noblinks Lens"
+
+Implementation:
+- [ ] Choose PDF library: `@react-pdf/renderer` (React-based, good for
+      complex layouts) or `puppeteer` (headless Chrome, pixel-perfect)
+      Recommendation: puppeteer — renders the existing report page to PDF,
+      no separate layout to maintain
+- [ ] Create `GET /api/lens/reports/[id]/pdf` route
+- [ ] Add "Download PDF" button to report page
+- [ ] Ensure PDF is clean on print (no interactive elements, proper pagination)
+- [ ] Include Noblinks logo and report metadata in header/footer
+
+### 8.3 — Compliance & Sovereignty Risk Flags
+
+**Why it sells:** The #1 reason EU companies evaluate EU clouds is regulatory
+pressure — GDPR, Schrems II, EU AI Act, NIS2. The ICC/Microsoft kill switch
+(2025) is now documented precedent. Calling out specific, named legal risks
+makes this a compliance tool (legal + security budget, not just engineering)
+and gives customers the language to justify the migration to their board.
+
+**Important distinction:** "Sovereign-washing" warning — if a customer's
+current or planned setup uses an EU region of a US provider (AWS Frankfurt,
+Azure Netherlands, GCP Belgium), this is NOT true sovereignty. The CLOUD Act
+applies regardless of data location. Lens must clearly flag this.
+
+**How it works (fully deterministic — no AI):**
+
+Rules are based on service type + provider origin + region:
+
+  CLOUD Act / Sovereignty flags (NEW — highest severity):
+  - Any detected service backed by a US-incorporated provider →
+    "CLOUD Act exposure: US law can compel data access regardless of
+    where data is physically stored. Precedent: Microsoft blocked ICC
+    prosecutor accounts under US sanctions (2025)."
+  - "Sovereign cloud" offering from US provider (AWS EU Sovereign,
+    Azure EU Data Boundary, Google Sovereign via T-Systems) →
+    "Sovereign-washing risk: software updates can be blocked under US
+    sanctions even if data stays in EU. True sovereignty requires an
+    EU-incorporated provider."
+
+  GDPR / Schrems II flags:
+  - Any service with US-only region availability → "Data transfer risk
+    under Schrems II — personal data leaving EU without adequate safeguards"
+  - Services with no EU-sovereign equivalent on target cloud → "Data
+    residency gap: no EU-sovereign alternative exists for [service]"
+  - S3 / Blob Storage with cross-region replication to US regions →
+    "Personal data may be replicated outside EU — GDPR Article 44 risk"
+  - Cognito / Azure AD / Firebase Auth → "Identity data (EU citizen
+    credentials) stored with US provider — GDPR Article 44 risk"
+
+  EU AI Act flags:
+  - Bedrock / SageMaker / Vertex AI / Azure OpenAI detected →
+    "AI system detected. Subject to EU AI Act obligations. Ensure model
+    inference logs and training data remain under EU jurisdiction."
+  - Rekognition / Face API / Azure Computer Vision (face detection) →
+    "Biometric processing detected. High-risk category under EU AI Act
+    Article 6. Requires conformity assessment."
+  - Comprehend / Language AI services on EU citizen data →
+    "Automated decision-making detected. GDPR Article 22 obligations apply."
+
+  NIS2 flags (critical infrastructure / defence):
+  - CloudTrail / Config / Security Hub absent → "No audit logging detected.
+    NIS2 Article 21 requires incident detection and logging capabilities."
+  - No backup service detected → "NIS2 Article 21 requires business
+    continuity measures including backups."
+  - Single-region deployment detected → "NIS2 requires resilience measures.
+    Single-region architecture creates unacceptable availability risk."
+
+  Proprietary lock-in flags (sovereignty risk):
+  - Lambda / Cloud Functions / Azure Functions → "Serverless compute:
+    no EU-sovereign managed equivalent. Re-architecture required."
+  - privatelink / ExpressRoute → "Network dependency on US provider
+    backbone. Traffic routing outside EU control."
+  - CloudFront / Azure CDN / Google CDN → "CDN PoPs outside EU control.
+    Content delivery sovereignty gap."
+
+  Severity levels:
+  - 🔴 Critical — documented legal risk or likely regulatory violation
+  - 🟡 Warning — requires legal review, potential violation
+  - 🔵 Info — sovereignty gap, lower immediate risk
+
+Implementation:
+- [ ] Create `src/lib/lens/compliance-engine.ts`
+- [ ] Define rule set as typed array (deterministic, no AI):
+  ```ts
+  interface ComplianceRule {
+    id: string
+    services: string[]        // service keys that trigger this rule
+    regulation: "cloud_act" | "gdpr" | "schrems2" | "eu_ai_act"
+               | "nis2" | "sovereignty"
+    severity: "critical" | "warning" | "info"
+    title: string
+    description: string
+    legalReference: string    // e.g. "GDPR Article 44", "CLOUD Act §2713"
+    remediation: string
+    precedent?: string        // e.g. "Microsoft/ICC 2025"
+  }
+  ```
+- [ ] Implement ~30 initial rules across CLOUD Act, GDPR, Schrems II,
+      EU AI Act, NIS2
+- [ ] Add `complianceFlags` array to `lensAnalysis` schema
+- [ ] Add compliance flags panel to report UI — prominent, above service
+      breakdown, with regulation badge per flag
+- [ ] Include compliance section in PDF export with legal citations
+- [ ] Add compliance summary to reports list tile ("2 critical · 3 warnings")
+- [ ] Add "sector mode" toggle: General / Public Sector & Defence
+      (stricter rules, NIS2 mandatory in defence mode)
+
+---
+
+## PHASE 9 — Inventory, Scheduled Scans & Retention Loop
+
+This phase transforms Lens from a one-time report tool into a continuously
+valuable service. The discovery work is already done — this phase persists
+and surfaces it.
+
+### 9.0 — Retention Philosophy
+
+**The core reframe:** Lens is not a report tool. It is a system users
+track over time.
+
+The product loop is:
+```
+Scan → Score → Improve → Drift → Repeat
+```
+
+Retention comes from ongoing clarity, not one-time reports. Every feature
+in this phase serves one goal: give users a number they care about, show
+them how to improve it, and notify them when it changes.
+
+If only three things get built from this phase:
+  1. EU Readiness KPI (score as a tracked metric with a target)
+  2. Path to Improvement (quantified actions)
+  3. Scheduled scans + Drift alerts
+
+That is sufficient for strong retention.
+
+---
+
+### 9.1 — Persistent Resource Inventory
+
+**Why it retains:** Infrastructure changes constantly. A customer who
+connects their AWS account once gets an always-current inventory of every
+resource across all 91 service types — without ever having to think about
+it. The inventory is only valuable if it stays fresh, which drives
+re-scans.
+
+**How it works:**
+Each analysis already detects resources with IDs, names, types, regions,
+and metadata. Currently this data is only used for the report and discarded.
+This phase persists it as a first-class queryable inventory.
+
+Schema addition:
+```ts
+lensInventory table:
+  id, userId, accountId, sourceCloud
+  service         // e.g. "ec2", "lambda", "rds"
+  resourceId      // cloud-native ID
+  resourceName    // human-readable name
+  resourceType    // e.g. "t3.medium", "postgres14"
+  region
+  extra           // JSONB — additional metadata
+  firstSeenAt     // when Lens first detected this resource
+  lastSeenAt      // updated on every scan
+  removedAt       // null if still present, set when no longer detected
+  complianceFlags // JSONB — flags that apply to this specific resource
+  createdAt, updatedAt
+```
+
+Features:
+- [ ] Create `lensInventory` table and migrations
+- [ ] After each scan: upsert resources into inventory (update lastSeenAt,
+      set removedAt for resources no longer detected)
+- [ ] Create `GET /api/lens/inventory` — paginated, filterable resource list
+- [ ] Inventory UI page (`/lens/inventory`):
+  - Searchable, filterable table (by service, region, compliance flag)
+  - "New since last scan" badge on recently added resources
+  - "Removed" indicator on decommissioned resources
+  - Per-resource compliance flag badges (CLOUD Act, GDPR, EU AI Act)
+  - Click resource → show which EU clouds support its equivalent
+- [ ] Add inventory link to Lens sidebar
+- [ ] "Last scanned X ago" indicator on inventory page
+
+### 9.2 — Scheduled Scans
+
+**Why it retains:** Customers don't have to remember to re-run. The
+inventory stays fresh automatically. Score changes surface without effort.
+
+Implementation:
+- [ ] Add `scheduleFrequency: "manual" | "weekly" | "monthly"` to
+      `lensAnalysis` / account settings
+- [ ] Cron job: `src/lib/lens/scheduler.ts`
+  - Runs daily, checks which accounts are due for a scheduled scan
+  - Triggers analysis for due accounts using stored credentials
+  - Stores result like any manual scan
+- [ ] Credential storage: encrypted IAM role ARN / GCP service account /
+      Azure credentials stored per account (already partially done for IAM)
+- [ ] UI: scheduled scan settings in `/lens/settings`
+  - Toggle: Manual / Weekly / Monthly
+  - "Next scan: Thursday 3 April"
+  - Scan history timeline
+- [ ] Plan gating: scheduled scans available on €79+/month plans only
+
+### 9.3 — Drift Alerts
+
+**What changed.** The core re-engagement loop.
+
+Drift is any change that affects your sovereignty posture since the last
+scan — whether caused by your team adding infrastructure or by EU clouds
+improving their offerings. Lens detects both directions.
+
+**Four drift types:**
+
+🔴 **Sovereignty regression** (your score got worse)
+  - New resource added that has no EU sovereign equivalent
+  - "You added AWS Bedrock this week. No EU sovereign equivalent exists.
+    Your OVHcloud score dropped 67% → 61%."
+  - Triggered immediately after a scheduled scan detects the change
+
+🟡 **New compliance exposure** (new flag triggered)
+  - A new resource triggers a CLOUD Act, GDPR, or EU AI Act rule
+  - "3 new Lambda functions detected. Serverless compute has no EU
+    sovereign equivalent — CLOUD Act exposure increased."
+  - "New Rekognition collection detected. High-risk category under
+    EU AI Act Article 6. Compliance review required."
+
+🟢 **Score improvement available** (EU cloud got better)
+  - A catalog entry updated: match type improved from "none" → "partial"
+    or "partial" → "compatible" for a service in the customer's inventory
+  - "Scaleway launched managed Kubernetes. You have 3 EKS clusters.
+    Your Scaleway score can improve from 52% → 67%. Re-scan to confirm →"
+  - Targeted: only sent to customers who actually have that service
+
+🔵 **Inventory change** (neutral — informational)
+  - Resources added or removed since last scan
+  - "14 new resources detected, 3 decommissioned since last scan.
+    See what changed →"
+
+**Delivery:**
+- Email (primary) — clean digest format, one email per drift event or
+  daily/weekly digest depending on preference
+- In-app notification badge on Lens sidebar
+- Each alert links directly to the relevant section of the report
+
+**Why this is differentiated:**
+No other tool does sovereignty drift detection. Terraform has config drift.
+Datadog has metric drift. Nobody watches whether your infrastructure is
+drifting away from EU sovereignty compliance. That's the gap.
+
+Implementation:
+- [ ] Create `lensDriftEvent` table:
+      (id, userId, accountId, type, severity, title, description,
+       affectedService, affectedResources[], previousScore, newScore,
+       createdAt, readAt)
+- [ ] `src/lib/lens/drift/detector.ts`
+      — runs after every scan, compares against previous scan
+      — produces typed drift events for all 4 categories
+- [ ] `src/lib/lens/drift/catalog-watcher.ts`
+      — on any catalog entry update, queries inventory for affected users
+      — creates "score improvement available" drift events
+- [ ] `src/lib/lens/drift/notifier.ts`
+      — sends emails for new drift events per user preferences
+- [ ] Drift feed UI at `/lens/drift` or as tab on overview page:
+      chronological list of drift events, filterable by type/severity
+- [ ] Drift summary widget on overview page:
+      "3 drift events since last scan — 1 critical"
+- [ ] Notification preferences in `/lens/settings`
+- [ ] Unsubscribe link in all emails (GDPR compliant)
+
+### 9.4 — EU Readiness KPI
+
+**The single most important retention feature.** Turns the compatibility
+score from a one-time number into a tracked metric users care about over
+time — like a credit score for cloud sovereignty.
+
+Features:
+- Score history chart on overview page: line graph of EU readiness score
+  across all scans, per target cloud
+- Score trend indicator: ↑ +6% this month / ↓ −3% this month
+- Readiness target: user sets a goal (e.g. "reach 80% on OVHcloud")
+  — shown as a target line on the chart
+  — progress bar: "You are 14 points from your target"
+- Best-fit cloud tracked over time: "OVHcloud has been your best fit for
+  3 consecutive scans"
+- Score breakdown over time: which services improved, which regressed
+
+DB additions:
+- [ ] `lensScoreHistory` table: (userId, accountId, targetCloud, score,
+      compatibleCount, partialCount, noneCount, scannedAt)
+- [ ] Populate on every scan (manual or scheduled)
+
+UI:
+- [ ] Score history chart on `/lens` overview page
+- [ ] Target-setting UI ("Set your readiness goal")
+- [ ] Score trend widget in reports list sidebar
+
+### 9.5 — Path to Improvement
+
+Turns insight into action. After every scan, Lens generates a prioritised
+list of specific steps that would increase the EU readiness score — with
+the exact score impact quantified for each.
+
+Examples:
+  "Replace AWS Lambda (4 functions) with Scaleway Serverless Functions
+   → +8% on Scaleway score · Medium effort"
+
+  "Migrate S3 buckets to Hetzner Object Storage (S3-compatible API,
+   minimal code changes) → +5% on Hetzner score · Low effort"
+
+  "Remove dependency on AWS Rekognition (no EU equivalent) — self-host
+   an open-source CV model → +4% on all EU clouds · High effort"
+
+Sorted by: impact ÷ effort ratio (quick wins first)
+
+Implementation:
+- [ ] `src/lib/lens/improvement-path.ts`
+      — for each "none" and "partial" match: calculate score delta if
+        resolved, estimate effort from catalog migrationEffort field
+      — sort by impact/effort ratio
+- [ ] "Path to 80%" section on report page (collapsible)
+- [ ] Each step shows: action, affected services, score delta, effort badge
+- [ ] "Mark as done" — user can tick off completed steps, triggers re-scan
+      suggestion to verify the improvement
+
+### 9.6 — Decision Mode (What-If)
+
+Used repeatedly during migration planning. Lets users simulate moving
+specific services to an EU cloud and see the score impact — without
+running a full scan.
+
+Examples:
+  "What if we replace Lambda with Scaleway Serverless Functions?"
+   → Score: 52% → 61% on Scaleway (+9%)
+
+  "What if we move everything compatible to OVHcloud and self-host
+   the rest?"
+   → Best achievable score on OVHcloud: 78%
+
+Implementation:
+- [ ] What-if engine: takes a list of "resolved services" → recalculates
+      score as if those matches were "compatible"
+- [ ] UI: checkboxes on service breakdown ("mark as resolved")
+      → live score update as user selects services
+- [ ] "Simulate migration" button on report page
+- [ ] Save simulation as a named scenario ("OVHcloud partial migration")
+
+### 9.7 — Top Risks Dashboard
+
+Always-visible panel showing the most critical sovereignty issues — not
+buried inside a report. Creates a habit of checking Lens regularly.
+
+Content:
+- CLOUD Act exposure count (critical)
+- GDPR / Schrems II risks (critical/warning)
+- EU AI Act flags (warning)
+- Services with no EU equivalent (count + list)
+- Sovereignty lock-in risks (proprietary services)
+
+Shown on:
+- `/lens` overview page (always visible, above the fold)
+- Weekly email digest (top 3 risks this week)
+- Report page header (summary bar)
+
+Implementation:
+- [ ] Aggregate compliance flags from latest scan into overview widget
+- [ ] Color-coded severity counts: 🔴 N critical · 🟡 N warnings · 🔵 N info
+- [ ] Click-through to full compliance panel in the report
+- [ ] "No new risks since last scan" positive state (reassuring if clean)
+
+### 9.8 — Weekly Email Digest
+
+Pulls users back every week with a concise, useful snapshot. Not a
+newsletter — a personal update on their account.
+
+Content (only items that changed or are actionable):
+  Subject: "Your EU readiness: 67% (+3% this week) · 1 new risk"
+
+  Body:
+  - Score change since last digest (↑ or ↓ with delta)
+  - New drift events (1–3 most important)
+  - Top improvement action (highest impact/effort ratio)
+  - EU cloud catalog changes that affect their stack (if any)
+  - CTA: "See full report →"
+
+Rules:
+  - Only sent if something changed or there is an actionable suggestion
+  - Skip if no scans ran and no catalog changes affected this account
+  - Opt-out per notification type in settings
+
+Implementation:
+- [ ] `src/lib/lens/notifications/weekly-digest.ts`
+      — runs every Monday, queries score history + drift events + path
+      — generates personalised email per user
+      — skips if nothing actionable to report
+- [ ] Email template: clean, minimal, score prominent at top
+- [ ] Unsubscribe link (GDPR compliant)
+
+---
+
+### 9.9 — Migration Readiness Forecast ("When should we move?")
+
+**The killer feature. This is where Lens becomes a strategic platform.**
+
+The problem it solves: Management sees 75% readiness, says "not good
+enough, let's wait" — and does nothing. There is no signal to act on.
+No way to know if waiting is the right call or how long to wait.
+
+Lens solves this by tracking the EU cloud ecosystem itself — not just
+your infrastructure — and forecasting when your readiness will improve
+without you changing anything.
+
+**What it shows:**
+
+```
+Current score:          75%  (today)
+Projected (3 months):   83%  (medium confidence)
+Projected (6 months):   91%  (low-medium confidence)
+
+Why:
+  → Scaleway Serverless Functions: expanding runtime support · ETA Q3 2026
+  → OVHcloud Managed Kubernetes: GA expected Q2 2026
+  → Hetzner Load Balancer v2: HTTP/3 + gRPC support · Q3 2026
+
+Blockers with no announced roadmap:
+  → AWS PrivateLink equivalent: not announced on any EU cloud
+  → Cognito-compatible managed identity: partial only (Keycloak)
+```
+
+**The "Wait vs Move" recommendation (deterministic, not AI):**
+
+```
+Recommendation: Wait — re-evaluate in 6 months
+
+Reason:
+  2 of your 4 critical blockers have announced equivalents
+  arriving Q2–Q3 2026. Migrating now requires significant
+  re-architecture. In 6 months the same migration carries
+  low risk.
+
+We will notify you when:
+  → Your OVHcloud readiness crosses 90%
+  → Scaleway Serverless Functions reaches GA
+  → Any critical blocker gets an announced roadmap entry
+```
+
+**Why this is GOLD for retention:**
+
+Users who set a migration threshold and wait for Lens's signal never
+cancel. They are subscribed to the ecosystem, not to a report. Lens
+becomes the system that tells them *when* to move. That is a permanent
+seat at the table.
+
+New retention loop:
+```
+Scan → Score → Forecast → Set Threshold → Wait → Alert → Decide → Act
+```
+
+---
+
+#### 9.9.1 — EU Cloud Roadmap Dataset (core data layer)
+
+This is maintained like the catalog — human-curated, NOT AI-generated.
+AI summarizes. Humans research and verify.
+
+Sources to monitor:
+  - EU cloud changelogs and release notes
+  - Public product roadmaps (OVHcloud, Scaleway, Hetzner blog)
+  - Conference talks and product announcements
+  - GitHub repos (open-source components of EU clouds)
+  - Documentation additions (new service pages appearing)
+
+Schema:
+```ts
+interface RoadmapEntry {
+  targetCloud: TargetCloud
+  capability: string         // e.g. "compute.function", "database.cassandra"
+  currentMatch: "none" | "partial"
+  projectedMatch: "partial" | "compatible"
+  status: "announced" | "in_beta" | "ga_imminent" | "rumoured" | "not_announced"
+  eta: string | null         // e.g. "Q3 2026", "H1 2026", null if unknown
+  confidence: "high" | "medium" | "low"
+  source: string             // URL to announcement / release note
+  notes: string              // what specifically is changing
+  lastVerified: string       // ISO date — when a human last confirmed this
+}
+```
+
+Critical rule: `eta` and `confidence` must be sourced from a real
+announcement. Never infer or estimate without a source. If unknown,
+`eta: null`. Integrity of this dataset is the product's credibility.
+
+- [ ] Create `src/lib/lens/catalog/roadmap.ts`
+- [ ] Populate initial entries for known announced features:
+      OVHcloud managed Kubernetes, Scaleway serverless expansion,
+      Hetzner managed databases, etc.
+- [ ] Add `lastVerified` date to each entry
+- [ ] Build internal admin page to add/update roadmap entries
+- [ ] Schedule quarterly review of all entries (stale entries flagged)
+
+#### 9.9.2 — Forecast Engine
+
+For each analysis, run the forecast:
+1. Find all "none" / "partial" matches in the customer's results
+2. Check if a roadmap entry exists for that capability × target cloud
+3. If yes: project the future score as if that match improves
+4. Group projections by timeline bucket (3mo / 6mo / 12mo)
+5. Apply confidence weighting (high=full delta, medium=50%, low=25%)
+6. Output: projected score per timeline + list of improvements driving it
+7. Identify blockers with no roadmap entry → "no announced equivalent"
+
+- [ ] Create `src/lib/lens/forecast-engine.ts`
+- [ ] Add `forecast` field to `lensAnalysis` schema:
+      ```ts
+      forecast: {
+        projections: { months: 3|6|12; score: number; confidence: string }[]
+        improvingCapabilities: { capability, cloud, eta, confidence }[]
+        permanentBlockers: { capability, cloud, notes }[]
+      }
+      ```
+- [ ] Run forecast as part of every analysis (after scoring)
+
+#### 9.9.3 — "Wait vs Move" Recommendation Engine
+
+Deterministic rules. Not AI. Auditable and consistent.
+
+```
+Rules (evaluated in order):
+
+READY:
+  score ≥ 90% AND criticalCompliance = 0 AND permanentBlockers ≤ 1
+  → "You can migrate now. Remaining gaps have viable workarounds."
+
+WAIT_SHORT (< 6 months):
+  score ≥ 75% AND forecast[6mo] ≥ 90% AND criticalCompliance ≤ 2
+  → "Wait 6 months. Key blockers have announced solutions arriving Q3 2026."
+
+WAIT_LONG (6–12 months):
+  score ≥ 60% AND forecast[12mo] ≥ 85%
+  → "Re-evaluate in 12 months. Ecosystem is improving for your stack."
+
+REARCHITECT:
+  score < 60% OR permanentBlockers > 3
+  → "Migration requires re-architecture. No timeline announced for
+     critical blockers. Consider replacing: [list services]."
+
+PARTIAL_MIGRATION:
+  partialCompatibleServices ≥ 70% AND criticalCompliance ≤ 1
+  → "Migrate compatible services now. Hold on [n] services until
+     equivalents are available."
+```
+
+- [ ] Create `src/lib/lens/recommendation-engine.ts`
+- [ ] Add `recommendation` field to `lensAnalysis` schema
+- [ ] Show recommendation prominently on report (above service breakdown)
+- [ ] Recommendation changes tracked in score history
+
+#### 9.9.4 — Migration Threshold & Watch Mode
+
+User sets a target. Lens watches and alerts when it's hit.
+
+```
+Watch settings (per account):
+  Target cloud: OVHcloud
+  Minimum readiness: 90%
+  Max critical compliance risks: 0
+  Max permanent blockers: 1
+
+Status: Watching
+  Current: 75% · 2 critical risks · 3 permanent blockers
+  Projected: 91% in ~6 months (medium confidence)
+  Next milestone: OVHcloud Managed Kubernetes GA → +8%
+
+Alerts you when:
+  ✓ Readiness threshold is crossed
+  ✓ A permanent blocker gets an announced solution
+  ✓ A critical compliance risk is resolved
+```
+
+Alert email when threshold is crossed:
+```
+Subject: Migration window open — Your OVHcloud readiness: 75% → 92%
+
+Two features you were waiting on are now available:
+  → OVHcloud Managed Kubernetes is now GA (+8%)
+  → Scaleway Serverless Functions now supports Node.js 22 (+5%)
+
+Your current recommendation: Ready to migrate.
+
+Remaining gap: AWS PrivateLink (no equivalent) — workaround: ...
+
+See your updated report →
+```
+
+- [ ] Watch mode settings in `/lens/settings` per account
+- [ ] `lensWatch` table: (userId, accountId, targetCloud, minScore,
+      maxCritical, maxBlockers, createdAt, triggeredAt)
+- [ ] After every scan and every catalog/roadmap update: evaluate all
+      active watches → trigger alert if threshold crossed
+- [ ] Watch status widget on overview page
+
+---
+
+### 9.10 — Migration Playbook ("We're going — what's the plan?")
+
+The CEO has two responses to the report:
+
+  Path A: "Score is 75%. Let's wait."
+          → Lens retains the customer. Watch Mode runs. Alert fires at 90%.
+
+  Path B: "I don't care. Start planning the migration."
+          → Lens must serve this too. Otherwise the product becomes
+            irrelevant the moment the decision is made.
+
+Path B is where Lens extends its value into the migration itself.
+When the CEO says "we're going," the report surfaces a structured,
+phased Migration Playbook — not a generic guide, but one built from
+the actual services detected in their account.
+
+**What the Migration Playbook contains:**
+
+```
+Migration Playbook — AWS → OVHcloud
+Generated for: [account name]
+Target: OVHcloud (74% compatible · estimated saving €8,400/mo)
+
+─────────────────────────────────────────────────────────────
+
+PHASE 1 — Quick wins (Week 1–2)
+Compatible services, low effort. Move these first.
+
+  EC2 (12 instances) → OVHcloud Public Cloud Instances
+    Map t3.medium → B2-7 (2 vCPU, 7GB). Terraform provider available.
+
+  S3 (4 buckets) → OVHcloud Object Storage
+    S3-compatible API. Change endpoint + access keys. No code changes.
+
+  RDS Postgres (2 instances) → OVHcloud Managed Databases
+    Full Postgres parity. pg_dump / pg_restore migration path.
+
+─────────────────────────────────────────────────────────────
+
+PHASE 2 — Moderate migration (Month 1–2)
+Partial matches. Compatible with known effort.
+
+  EKS (1 cluster) → Self-managed Kubernetes on OVHcloud
+    Use Cluster API or kubeadm. Control plane self-managed.
+    Hetzner CCM + CSI drivers available for OVHcloud equivalent.
+
+  ELB (3 load balancers) → OVHcloud Load Balancer
+    HTTP/HTTPS supported. TCP passthrough available.
+    Health check configuration differs — review before cutover.
+
+─────────────────────────────────────────────────────────────
+
+PHASE 3 — Re-architecture required (Month 2–4)
+No direct match. Options available but require code changes.
+
+  Lambda (8 functions) → Containerise + deploy on OVHcloud VMs
+    Option A: Docker + systemd (simplest, no orchestration)
+    Option B: Knative on Kubernetes cluster from Phase 2
+    Estimated effort: 2–4 weeks per function depending on complexity.
+
+  Cognito (1 user pool) → Self-hosted Keycloak on OVHcloud
+    Full OAuth2/OIDC compatibility. SDK config change only after setup.
+    Estimated effort: 3–5 days including data migration.
+
+─────────────────────────────────────────────────────────────
+
+PHASE 4 — Strategic decisions (No EU equivalent)
+No announced roadmap. Decide: replace, self-host, or accept dependency.
+
+  SageMaker (1 endpoint) → Options:
+    A: Keep on AWS temporarily (hybrid period — CLOUD Act risk persists)
+    B: Self-host MLflow + model serving on OVHcloud GPU instances
+    C: Replace with open-source inference server (TorchServe / Triton)
+
+  Rekognition (1 collection) → Options:
+    A: Self-host open-source CV model (InsightFace, DeepFace)
+    B: Remove feature from EU-facing product until EU equivalent exists
+
+─────────────────────────────────────────────────────────────
+
+HYBRID PERIOD WARNING:
+During migration, you will operate across both AWS and OVHcloud.
+CLOUD Act exposure persists until all data is off US infrastructure.
+Estimated hybrid period: 6–10 weeks at this complexity level.
+
+─────────────────────────────────────────────────────────────
+
+ESTIMATED TIMELINE: 10–14 weeks
+ESTIMATED COST DURING TRANSITION: +€3,200/mo (running both clouds)
+POST-MIGRATION SAVING: €8,400/mo
+BREAK-EVEN: Month 1 after full migration
+```
+
+**Why this extends Lens's lifetime:**
+
+The customer uses Lens throughout the migration — not just before the
+decision. Each phase completion triggers a re-scan to verify the move
+and update the readiness score. The playbook becomes the migration
+project plan. Lens is open every week.
+
+**Implementation:**
+
+- [ ] Create `src/lib/lens/migration-playbook.ts`
+      — groups matched services into phases by effort level
+      — for "none" matches: generates options list from catalog alternatives
+      — estimates hybrid period duration from service count + effort scores
+      — calculates transition cost (both clouds running simultaneously)
+- [ ] "Start Migration Planning" button on report page
+      (appears alongside "Wait vs Move" recommendation)
+- [ ] Playbook rendered as collapsible phases on report page
+- [ ] Playbook included in PDF export as final section
+- [ ] Re-scan after each phase: "Mark Phase 1 complete → re-scan to verify"
+      — score updates as services move off AWS
+      — playbook updates to show remaining phases only
+- [ ] AI writes the plain-English narrative for each service's migration
+      path (phrasing only — the phases, options, and effort are deterministic)
+
+**Updated Core Truth (two paths, both served):**
+
+```
+CEO: "Are we ready to migrate?"
+  Lens: Here is the answer. Here is why. Here is the evidence.
+
+CEO: "Let's wait."
+  Lens: We're watching. We'll alert you when the window opens.
+
+CEO: "We're going."
+  Lens: Here is your phased migration playbook, built from your
+        actual detected services.
+```
+
+---
+
+## Positioning (Final Form)
+
+The CEO/CTO question: **"Are we ready to migrate?"**
+
+```
+Without Lens:   Nobody knows. Engineering says "it's complicated."
+                Management waits indefinitely. Nothing happens.
+
+With Lens:      The answer is always clear:
+                Yes / Not yet / Not without changes / We're watching.
+                With the evidence, the timeline, and the alert.
+```
+
+Tagline: **"We'll tell you when you're ready. And show you the way when you are."**
+
+Two paths. Both served.
+
+```
+CEO: "Let's wait."   → Watch Mode. Alert when ready.
+CEO: "We're going."  → Migration Playbook. Phase by phase.
+```
+
+Every feature in the product exists to make that answer more precise,
+more trustworthy, and more timely — and when the decision is made,
+to make the execution less risky.
+
+---
+
+## Pricing Model (Updated for Retention)
+
+Lower price = lower barrier = "just leave it running" decision rather than
+"do I need this right now" decision.
+
+| Plan | Price | Accounts | Scans | Scheduled | PDF | Forecast | Watch Mode | Team |
+|------|-------|----------|-------|-----------|-----|----------|------------|------|
+| **Starter** | €29/mo | 1 | 3/mo | — | — | — | — | 1 user |
+| **Growth** | €79/mo | 5 | 20/mo | Weekly | ✅ | ✅ | ✅ | 5 users |
+| **Agency** | €199/mo | Unlimited | Unlimited | Daily | ✅ | ✅ | ✅ | Unlimited |
+
+Notes:
+- Starter: enough to try the product and run quarterly manual checks
+- Growth: the retention tier — forecast + watch mode means users stay subscribed
+  waiting for their migration signal. Scheduled scans keep data fresh passively.
+- Agency: consulting firms running client analyses, white-label PDF
+- All plans: compliance flags, cost estimates, inventory, drift alerts, email digest
+- Free tier: 1 manual scan, no inventory, no forecast, no PDF
+- Forecast + Watch Mode gated to Growth+ — this is the primary upgrade driver
+
+---
+
+## PHASE 10 — Testing
+
+- [ ] Unit tests: AWS detector (mock SDK responses → canonical output)
+- [ ] Unit tests: GCP detector
+- [ ] Unit tests: Azure detector
+- [ ] Unit tests: catalog lookup (known service → expected match per cloud)
+- [ ] Unit tests: scoring engine (formula + penalties)
+- [ ] Unit tests: rule engine
+- [ ] Unit tests: compliance engine (known services → expected flags)
+- [ ] Unit tests: pricing estimator (known services → expected cost range)
+- [ ] Integration test: AWS IAM → full pipeline → 7-cloud report + PDF
+- [ ] Integration test: GCP service account → full pipeline → 7-cloud report
+- [ ] Integration test: Azure credentials → full pipeline → 7-cloud report
+- [ ] E2E: UI flow for each source cloud
+- [ ] E2E: PDF download produces valid, complete document
+
+---
+
+## What AI Does vs What Code Does
+
+| Concern | Owner |
+|---|---|
+| Discover services via cloud APIs | Deterministic (SDK calls) |
+| Parse IaC / YAML files | Deterministic (parser) |
+| Service → capability mapping | Deterministic (lookup table) |
+| Catalog lookup per target cloud | Deterministic (curated catalog) |
+| Match type (compatible/partial/none) | Deterministic (catalog) |
+| Weighted scoring per cloud | Deterministic (formula) |
+| Rule violation detection | Deterministic (rule engine) |
+| Compliance flag detection | Deterministic (rule set) |
+| Cost savings estimation | Deterministic (public pricing APIs) |
+| Ranking EU clouds by fit | Deterministic (sort by score) |
+| PDF generation | Deterministic (puppeteer/react-pdf) |
+| Inventory diff (change detection) | Deterministic (set comparison) |
+| Drift detection (score/compliance/inventory change) | Deterministic (diff) |
+| Catalog change → affected users | Deterministic (inventory lookup) |
+| Scheduled scan triggering | Deterministic (cron) |
+| Writing migration step explanations | AI (phrasing only) |
+| Executive summary paragraph | AI (phrasing only) |
+| Explaining risks in plain English | AI (phrasing only) |
+| Email body copy | AI (phrasing only) |
+
+---
+
+## Current Status
+
+```
+✅ DONE
+  AWS detection: 91 services, parallel, fail-silent
+  Hetzner catalog: 91 entries (inline in route.ts)
+  Basic scoring: weighted, per-service
+  AI mapping: Anthropic haiku per service
+  Report UI: score ring, service breakdown, expandable cards
+  Reports list: grouped by day, collapsible
+  Overview page: real data from DB
+  Auth, DB, billing scaffold
+
+🔨 NEXT PRIORITY (pre-launch)
+  1. Compliance flags engine (highest sales impact, fastest to build)
+  2. PDF export (table stakes for enterprise sales)
+  3. Cost savings estimate (CFO-level talking point)
+  4. Inventory (persistence layer — data already exists, just needs storing)
+  5. Extract HETZNER_CATALOG → src/lib/lens/catalog/hetzner.ts
+  6. Add sourceCloud to DB schema
+  7. Build OVHcloud + Scaleway catalogs
+  8. Multi-cloud scoring: score all 7 in one analysis pass
+  9. Report UI: ranked EU cloud comparison table + compliance panel + savings
+
+📋 AFTER THAT
+  10. Scheduled scans + credential storage
+  11. Email notifications (inventory diff + catalog change alerts)
+  12. Update pricing: €29 / €79 / €199
+  13. GCP detector + GCP catalog entries
+  14. Azure detector + Azure catalog entries
+  15. Rule engine (SaaS lock-in, proprietary features)
+  16. AI executive summary
+  17. Terraform / Helm parsers
+  18. Tests
+```
+
+---
+
+## Implementation Order
+
+```
+Commercial features (close deals)
+  Compliance flags engine         ← fastest, highest perceived value
+  PDF export                      ← table stakes for enterprise
+  Cost savings estimate           ← CFO talking point
+
+  → Catalog restructure (extract + multi-target)
+    → DB schema update (sourceCloud + multi-cloud results + compliance + cost)
+      → API updates
+        → UI updates (compliance panel, savings banner, PDF button, 7-cloud view)
+          → GCP detector
+            → Azure detector
+              → Rule engine
+                → AI executive summary
+                  → IaC parsers (Terraform, Helm)
+                    → Tests
+```
+
+**Start here:** Compliance flags + PDF export. Both are self-contained,
+don't require multi-cloud catalog work, and immediately make the product
+more saleable with existing AWS detection.
+
+**The full retention loop, once complete:**
+
+```
+Connect AWS (once)
+  → Scan runs (automatically, weekly)
+    → Score tracked over time (EU Readiness KPI)
+      → Forecast shown: "91% in 6 months, here's why"
+        → "Wait vs Move" recommendation issued
+          → User sets migration threshold: "alert me at 90%"
+            → User enters Watch Mode — subscribed to the ecosystem
+              → Drift detected / catalog improved
+                → Email: "Your threshold was crossed — migration window open"
+                  → User acts
+```
+
+Retention comes from ongoing clarity, not one-time reports.
+Users in Watch Mode never cancel. They are waiting for your signal.
+Build a system users track over time.

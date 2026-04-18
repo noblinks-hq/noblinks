@@ -1,0 +1,866 @@
+# Noblinks Guide — Implementation Plan
+# EU Cloud Migration Blueprint + AI Migration Assistant
+# Last updated: April 2026
+
+## Product Suite
+
+  Lens   → `specs/lens/implementation plan`   — "Are you ready to migrate?"
+  Glance → `specs/glance/implementation plan` — "What do I have and how does it connect?"
+  Guide  → `specs/guide/implementation plan`  — "Let me walk you through building it on Hetzner." (this file)
+
+Guide is the final product in the suite. Its inputs are:
+  - Lens: compatibility score, compliance flags, per-service match results
+  - Glance: full resource inventory, dependency graph, migration wave sequence
+
+Without Lens + Glance, Guide has no blueprint to work from.
+
+---
+
+## Execution Model Constraints
+
+These constraints are non-negotiable. All design decisions must comply.
+
+  ✅  Guide IS: a guided migration assistant.
+  🚫  Guide is NOT: an infrastructure execution engine.
+
+Guide NEVER:
+  - Creates cloud resources on the user's behalf
+  - Modifies or deletes cloud resources
+  - Runs deployment scripts or automation
+  - Acts as a replacement for Terraform, Pulumi, or cloud consoles
+
+Guide ALWAYS:
+  - Tells the user exactly what to do and why
+  - Provides commands, config values, and console steps
+  - Waits for the user to confirm they've done it
+  - Validates via read-only Hetzner API that the step succeeded
+  - Updates progress only after user confirmation or validation
+
+The Hetzner API is used for reading and validating only.
+All write operations are performed by the user in the Hetzner console or CLI.
+
+There is no "one-click migration." The user builds their infrastructure.
+Guide makes sure they do it correctly and in the right order.
+
+---
+
+## Core Truth
+
+Guide answers one question:
+
+> "How do I actually build this on Hetzner?"
+
+Not "should I migrate" — Lens answered that.
+Not "what do I have" — Glance answered that.
+Guide takes you from "yes, let's go" to "it's running on Hetzner."
+
+The user should feel: "I understand what I'm doing, and I'm not lost."
+Not: "The system is doing everything for me."
+
+Guide has two modes:
+
+**Blueprint Mode** — planning tool, no Hetzner account required.
+"Here is how your AWS architecture maps to Hetzner. Here are the gaps.
+Here is the sequence. Here are the exact configs for each resource."
+Useful from day one, before any Hetzner work has started.
+
+**Agent Mode** — interactive, step-by-step migration assistant.
+The user connects a read-only Hetzner API token. The agent reads what
+already exists on Hetzner. The agent knows what needs to exist (from the
+Blueprint). The agent guides the user through building the difference —
+one resource at a time, in dependency order, with validation at every step.
+
+---
+
+## Why This Is Different From Terraform / Pulumi
+
+Terraform generates code. It requires the user to understand that code,
+debug plan output, handle state drift, and manage 40% of cases where
+generated config doesn't match actual requirements.
+
+Guide does something fundamentally different:
+
+1. **It explains WHY, not just WHAT.**
+   "You had a t3.large — 4 vCPU, 16 GB RAM. On Hetzner, the closest
+   is CX42 (8 vCPU, 16 GB RAM) at €27.49/mo — cheaper and slightly
+   more powerful. Here's how to create it."
+
+2. **It handles gaps honestly.**
+   "Hetzner doesn't have managed Kubernetes. Your EKS cluster had 3
+   t3.medium nodes. The closest option is K3s — same API, 3 CX32
+   servers, takes about 10 minutes. Here are the exact commands.
+   Want to do this now or skip for later?"
+
+3. **It stays in context.**
+   The agent knows your entire architecture. When guiding a server
+   setup, it knows which Hetzner Network to attach, which firewall
+   rules to apply (translated from your security groups), which SSH key
+   to use, and what the next step is in the migration wave sequence.
+
+4. **It validates each step.**
+   After the user confirms they've created a resource, the agent calls
+   the Hetzner API (read-only) to confirm it exists and is configured
+   correctly. It does not assume success.
+
+5. **It adapts to what's already done.**
+   If the user has already created some resources, the agent detects
+   them on session start and skips them — no duplicate work.
+
+This is pair programming for infrastructure migration. The user writes
+the code (creates the resources). The agent navigates and reviews.
+
+---
+
+## The Product Loop
+
+```
+Blueprint Generated
+  (from Glance export — resource mappings, wave sequence, gap analysis)
+        ↓
+User Reviews + Customises
+  (edits resource names, selects options for gaps, confirms wave order)
+        ↓
+User Connects Read-Only Hetzner API Token
+  (agent reads what already exists — validates only)
+        ↓
+Agent Session Begins
+  → Agent computes delta: what's in the Blueprint but not yet on Hetzner
+  → Agent picks up current wave + step
+  → Agent guides user through next step (instructions + commands)
+  → User performs the step in Hetzner console or CLI
+  → User tells agent "done"
+  → Agent validates via Hetzner read API
+  → Repeat
+        ↓
+All Waves Complete
+  → Post-migration checklist
+  → DNS cutover guidance
+  → Cleanup instructions
+```
+
+---
+
+## PHASE 1 — Blueprint Generator
+
+### 1.1 — Blueprint Data Model
+
+```ts
+interface MigrationBlueprint {
+  id: string
+  userId: string
+  organizationId: string
+  label: string                     // e.g. "AWS → Hetzner - April 2026"
+  sourceCloud: "aws" | "gcp" | "azure"
+  targetCloud: "hetzner"            // v1: Hetzner only, expand later
+  lensScore: number
+  glanceExportId: string            // reference to Glance blueprint export
+
+  // Core content
+  resourceMappings: ResourceMapping[]
+  networkPlan: NetworkPlan
+  migrationWaves: BlueprintWave[]
+  gapAnalysis: GapItem[]
+  costEstimate: CostEstimate
+
+  // Status
+  status: "draft" | "ready" | "in_progress" | "complete"
+  migrationProgress: number         // 0–100%, updated as user confirms steps
+  createdAt: string
+  updatedAt: string
+}
+
+interface ResourceMapping {
+  id: string
+  blueprintId: string
+  sourceResourceId: string          // GlanceResource.id
+  sourceService: string             // "ec2", "rds", "lambda"
+  sourceName: string
+  sourceConfig: Record<string, unknown>  // key config from Glance (no secrets)
+
+  // Target — what the user needs to create on Hetzner
+  targetService: string             // "hetzner_server", "hetzner_managed_db", etc.
+  targetName: string                // user-editable, default = "htz-{sourceName}"
+  targetSpec: HetznerResourceSpec   // concrete config the user should create
+  equivalenceType: "direct" | "partial" | "workaround" | "gap"
+  equivalenceNotes: string          // e.g. "No managed FaaS — use K3s + OpenFaaS"
+
+  // Migration tracking
+  migrationWave: number
+  migrationEffort: "low" | "medium" | "high"
+  migrationStatus: "pending" | "in_progress" | "complete" | "skipped"
+
+  // Validated Hetzner resource (populated after agent confirms it exists)
+  hetznerResourceId: number | null  // set after user creates + agent validates
+  hetznerResourceType: string | null
+  validatedAt: string | null
+
+  // Content
+  staticGuide: string               // slug of applicable static guide
+  customInstructions: string | null // agent-generated notes for this specific resource
+}
+
+// targetSpec describes what the user must create — it is instructions, not a
+// provisioning payload. The agent never passes this to the Hetzner API.
+type HetznerResourceSpec =
+  | HetznerServerSpec
+  | HetznerNetworkSpec
+  | HetznerManagedDbSpec
+  | HetznerObjectStorageSpec
+  | HetznerLoadBalancerSpec
+  | HetznerFirewallSpec
+  | HetznerVolumeSpec
+  | HetznerDnsSpec
+  | K3sClusterSpec           // K3s = EKS gap workaround
+  | OpenFaaSSpec             // OpenFaaS on K3s = Lambda gap workaround
+```
+
+### 1.2 — Service-to-Hetzner Mapping Table
+
+Deterministic. Human-curated. Not AI-generated.
+
+```
+AWS Service         → Hetzner Equivalent                    Type
+─────────────────────────────────────────────────────────────────────────
+ec2                 → Cloud Server (CX/CCX/CAX)             direct
+ec2 (GPU)           → GPU Server (GX)                       direct
+ec2 (arm)           → CAX servers (Ampere)                  direct
+rds (postgres)      → Managed Database (PostgreSQL)         direct
+rds (mysql)         → Managed Database (MySQL)              direct
+rds (aurora)        → Managed Database (postgres/mysql)     partial
+rds (oracle)        → Self-hosted on Cloud Server           workaround
+rds (mssql)         → Self-hosted on Cloud Server           workaround
+s3                  → Object Storage (S3-compatible)        partial
+efs                 → Hetzner Volume + NFS (self-managed)   partial
+elasticache (redis) → Self-hosted Redis on Cloud Server     workaround
+elasticache (memcached) → Self-hosted Memcached             workaround
+dynamodb            → Self-hosted ScyllaDB                  workaround
+eks                 → K3s / RKE2 on Cloud Servers           workaround
+ecr                 → GHCR / self-hosted Harbor             gap
+lambda              → OpenFaaS on K3s / containerised       workaround
+ecs                 → K3s (deploy as Deployments)           workaround
+elb (alb)           → Hetzner Load Balancer                 direct
+elb (nlb)           → Hetzner Load Balancer                 partial
+cloudfront          → BunnyCDN / Fastly EU                  gap (not Hetzner-native)
+route53             → Hetzner DNS                           direct
+vpc                 → Hetzner Cloud Network                 direct
+kms                 → Self-hosted HashiCorp Vault           workaround
+secretsmanager      → Self-hosted Vault                     workaround
+sqs                 → Self-hosted RabbitMQ or NATS          workaround
+sns                 → Self-hosted NATS                      workaround
+eventbridge         → Self-hosted NATS JetStream            workaround
+kinesis             → Self-hosted Apache Kafka              workaround
+cognito             → Self-hosted Keycloak                  workaround
+ses                 → Postmark (EU) / Mailgun (EU)          gap (not Hetzner-native)
+cloudwatch          → Grafana + Prometheus (self-hosted)    workaround
+cloudtrail          → Self-hosted OpenSearch + Fluentd      workaround
+codebuild           → Woodpecker CI / Gitea Actions         gap (not Hetzner-native)
+codecommit          → Gitea (self-hosted) / GitHub          gap
+backup              → Hetzner Snapshots + restic            workaround
+acm                 → Let's Encrypt + cert-manager          direct
+waf                 → Nginx + ModSecurity (self-hosted)     workaround
+guardduty           → Wazuh (self-hosted)                   workaround
+directconnect       → Hetzner dedicated server colocation   partial
+sagemaker           → Self-hosted on GPU Server (GX)        workaround
+bedrock             → Mistral / Llama via Ollama on GPU     gap / workaround
+```
+
+### 1.3 — Blueprint Generation Algorithm
+
+```
+Input: GlanceBlueprintExport (resources + dependencies + waves + compliance flags)
+
+For each resource in export.resources:
+  1. Look up in HETZNER_MAPPING → equivalenceType, targetService, targetSpec defaults
+  2. Size the target resource:
+     - EC2 instance type → nearest Hetzner server type by vCPU + RAM (see 1.4)
+     - RDS instance class → nearest Hetzner managed DB tier
+     - Lambda → OpenFaaS config (memory, timeout)
+  3. Build targetSpec — the configuration the user should create (not an API call)
+  4. Set targetName = "htz-{sourceName}"
+  5. Set migrationWave from Glance wave plan
+  6. Attach staticGuide slug for this service type
+  7. Create ResourceMapping record
+
+For the network plan:
+  1. For each VPC: describe the equivalent Hetzner Network (same CIDR range)
+  2. For each security group: translate rules to equivalent Hetzner Firewall config
+     - Protocol + port = direct translation
+     - Security group reference = Hetzner label selector equivalent
+  3. Map subnets → Hetzner Network subnets (same structure, same IP ranges)
+
+For gap analysis:
+  1. For each resource with equivalenceType "gap":
+     - Document the gap clearly and honestly
+     - Provide the best available workaround
+     - Mark as requiring a user decision: skip / workaround / accept gap
+     - Present decision during blueprint review before session starts
+
+Generate cost estimate:
+  1. For each targetSpec: look up Hetzner public pricing
+  2. Sum monthly cost of all target resources
+  3. Compare to source cloud estimate (from Lens pricing engine)
+  4. Show: "Your Hetzner equivalent costs ~€X/month vs ~€Y/month on AWS"
+```
+
+### 1.4 — Instance Size Mapping (EC2 → Hetzner)
+
+```
+EC2 Type     vCPU   RAM    → Hetzner      vCPU  RAM    Cost/mo
+─────────────────────────────────────────────────────────────────
+t3.nano       2      0.5GB → CX11          2     2GB    €3.99
+t3.micro      2      1GB   → CX11          2     2GB    €3.99
+t3.small      2      2GB   → CX21          2     4GB    €5.99
+t3.medium     2      4GB   → CX22          2     4GB    €7.49
+t3.large      2      8GB   → CX32          4     8GB    €13.99
+t3.xlarge     4      16GB  → CX42          8     16GB   €27.49
+t3.2xlarge    8      32GB  → CX52         16     32GB   €54.49
+m5.large      2      8GB   → CX32          4     8GB    €13.99
+m5.xlarge     4      16GB  → CX42          8     16GB   €27.49
+m5.2xlarge    8      32GB  → CX52         16     32GB   €54.49
+m5.4xlarge   16      64GB  → CCX43        16     64GB   €104.99  (dedicated)
+c5.large      2      4GB   → CCX23         4     16GB   €56.99   (dedicated CPU)
+c5.xlarge     4      8GB   → CCX33         8     32GB   €104.99
+r5.large      2      16GB  → CX42          8     16GB   €27.49
+r6g.large     2      16GB  → CAX31         8     16GB   €18.99   (ARM Ampere)
+```
+
+---
+
+## PHASE 2 — Static Migration Guides
+
+Library of human-written, step-by-step guides for each service migration.
+Not AI-generated. Authoritative, tested, updated as Hetzner evolves.
+
+Structure: one guide per service type.
+
+```
+src/content/guides/
+  aws-ec2-to-hetzner-server.md
+  aws-rds-postgres-to-hetzner-managed-db.md
+  aws-rds-mysql-to-hetzner-managed-db.md
+  aws-rds-aurora-to-hetzner-managed-db.md
+  aws-s3-to-hetzner-object-storage.md
+  aws-eks-to-k3s-on-hetzner.md
+  aws-lambda-to-openfaas-on-k3s.md
+  aws-ecs-to-k3s-deployments.md
+  aws-elasticache-redis-to-self-hosted.md
+  aws-dynamodb-to-scylladb.md
+  aws-cognito-to-keycloak.md
+  aws-alb-to-hetzner-load-balancer.md
+  aws-cloudfront-to-bunnycdn.md
+  aws-route53-to-hetzner-dns.md
+  aws-vpc-to-hetzner-networks.md
+  aws-secretsmanager-to-vault.md
+  aws-sqs-to-rabbitmq.md
+  aws-ses-to-postmark.md
+  aws-cloudwatch-to-grafana-prometheus.md
+  aws-kms-to-vault-transit.md
+  aws-waf-to-nginx-modsecurity.md
+  aws-codebuild-to-woodpecker-ci.md
+  aws-acm-to-letsencrypt-cert-manager.md
+  aws-backup-to-hetzner-snapshots.md
+  aws-sagemaker-to-gpu-server.md
+```
+
+Each guide contains:
+1. **What you had** — AWS service, typical config, what it did for you
+2. **What you're getting** — Hetzner equivalent, feature comparison table
+3. **What you lose** — honest gap documentation, no sugarcoating
+4. **Prerequisites** — what must exist on Hetzner before you start this step
+5. **Step-by-step instructions** — numbered, concrete, Hetzner console + CLI both shown
+6. **Exact config values** — the specific values to enter, derived from your Blueprint
+7. **Verification** — how to confirm it's working correctly
+8. **Next steps** — what to configure next, how to connect to dependent services
+9. **Troubleshooting** — common errors and fixes
+
+Guides are rendered in the Guide UI with:
+- Progress checkboxes per step (persistent, stored per resource per user)
+- Code blocks with copy-to-clipboard
+- Exact values pre-filled from the user's Blueprint (their resource names, CIDRs, etc.)
+- "Mark complete" button → updates blueprint migration status for that resource
+- Link to relevant Hetzner documentation
+
+The agent references these guides contextually — it does not re-explain what
+a guide already covers. It answers questions about the guide steps.
+
+---
+
+## PHASE 3 — AI Migration Agent
+
+### 3.1 — Agent Overview
+
+The Migration Agent is a conversational assistant with:
+- Full knowledge of the user's Blueprint (their specific architecture and target specs)
+- Read-only access to the user's Hetzner account (to check what exists)
+- Memory of what has been confirmed completed in previous sessions
+- The ability to explain, advise, validate, and answer questions
+
+The agent is NOT:
+- An automation engine. It guides the user. The user creates resources.
+- Terraform. It does not generate IaC files (though it can explain what the
+  equivalent Terraform would look like if the user asks).
+- Generic. It always references the user's actual resource names, sizes, and config.
+
+The agent behaves like a senior infrastructure engineer sitting next to the user:
+direct, specific, always grounded in the actual architecture, honest about gaps.
+
+### 3.2 — Agent State Machine
+
+```
+STATE: SETUP
+  → User connects read-only Hetzner API token (required for validation)
+  → Agent reads current Hetzner state: servers, networks, databases, etc.
+  → Agent loads Blueprint: what needs to exist when migration is done
+  → Agent computes DELTA: what's in Blueprint but not yet on Hetzner
+  → Agent presents: "Here's where we are. Here's what's next."
+
+STATE: ACTIVE
+  Loop:
+  → Agent identifies the next pending resource in current wave
+  → Agent presents the step:
+      "Next: Create a Hetzner Network. Here's why. Here's exactly what to do."
+  → Agent provides: console path + exact values + CLI alternative
+  → User does the step
+  → User says "done" (or asks a question)
+  → Agent validates via Hetzner read API
+      - Resource exists? Correct type? Correct config?
+  → If valid: mark complete, move to next step
+  → If invalid or missing: tell the user what's wrong and how to fix it
+
+STATE: QUESTION
+  → User asks a question during a step
+  → Agent answers with full context (knows the blueprint, knows the gap, etc.)
+  → Agent returns to where the step was
+
+STATE: BLOCKED
+  → A step requires something the Hetzner API cannot validate
+    (e.g., DB data migration, DNS cutover at registrar, app config changes)
+  → Agent explains exactly what to do, provides commands
+  → Agent waits for user confirmation
+  → Agent proceeds once user says done
+
+STATE: GAP
+  → Current resource has equivalenceType "gap"
+  → Agent explains the gap honestly: what's missing, what the best workaround is
+  → Agent asks: "Do you want to use the workaround, or skip this for now?"
+  → User decides → agent records decision → moves on
+
+STATE: COMPLETE
+  → All waves complete or all non-skipped resources confirmed
+  → Agent presents post-migration checklist
+  → Agent provides DNS cutover guidance
+  → Agent provides cleanup sequence (AWS resource removal order)
+```
+
+### 3.3 — Agent Capabilities (Read + Validate Only)
+
+The agent has access to read-only tools wrapping the Hetzner API.
+No write tools exist. The agent never creates, modifies, or deletes resources.
+
+```ts
+// Read tools — called silently, no user interaction needed
+hetzner_list_servers()             → Server[]
+hetzner_get_server(id)             → Server
+hetzner_list_networks()            → Network[]
+hetzner_get_network(id)            → Network
+hetzner_list_firewalls()           → Firewall[]
+hetzner_list_load_balancers()      → LoadBalancer[]
+hetzner_list_managed_databases()   → ManagedDatabase[]
+hetzner_list_volumes()             → Volume[]
+hetzner_list_dns_zones()           → DnsZone[]
+hetzner_list_dns_records(zoneId)   → DnsRecord[]
+hetzner_list_ssh_keys()            → SshKey[]
+hetzner_list_server_types()        → ServerType[]  // to show available options
+hetzner_list_locations()           → Location[]
+hetzner_get_pricing()              → PricingInfo
+
+// Validation tools — called after user confirms a step is done
+hetzner_find_server_by_name(name)  → Server | null
+hetzner_find_network_by_name(name) → Network | null
+hetzner_find_database_by_name(name) → ManagedDatabase | null
+hetzner_check_server_running(id)   → boolean
+hetzner_check_port_open({ ip, port }) → boolean  // TCP probe only
+```
+
+All tools are read-only. There are no write tools. Period.
+
+The Hetzner API token stored in the session must be the minimum scope
+required for these reads. A read-only token is sufficient and preferred.
+
+### 3.4 — Step Presentation Format
+
+Every step the agent presents follows this structure:
+
+```
+Step N: [Action title]
+
+Why:
+[One or two sentences explaining why this step is needed and what depends on it]
+
+What to create:
+  Name:     htz-prod-network
+  Type:     Cloud Network
+  Location: Falkenstein (fsn1) — Germany
+  IP range: 10.0.0.0/16
+  Subnets:  10.0.1.0/24 (zone: eu-central)
+            10.0.2.0/24 (zone: eu-central)
+            10.0.3.0/24 (zone: eu-central)
+
+This replaces your AWS VPC (vpc-0abc123) in us-east-1 with the same CIDR
+structure. The 3 subnets map directly — same IP ranges, same topology.
+
+In the Hetzner console:
+  1. Go to Cloud Console → Networks → Create Network
+  2. Enter name: htz-prod-network
+  3. Set IP range: 10.0.0.0/16
+  4. Add subnet: 10.0.1.0/24
+  5. Add subnet: 10.0.2.0/24
+  6. Add subnet: 10.0.3.0/24
+  7. Click Create
+
+CLI alternative:
+  hcloud network create --name htz-prod-network --ip-range 10.0.0.0/16
+  hcloud network add-subnet htz-prod-network --type cloud --network-zone eu-central --ip-range 10.0.1.0/24
+  hcloud network add-subnet htz-prod-network --type cloud --network-zone eu-central --ip-range 10.0.2.0/24
+  hcloud network add-subnet htz-prod-network --type cloud --network-zone eu-central --ip-range 10.0.3.0/24
+
+Tell me when done.
+```
+
+### 3.5 — Validation Flow
+
+After the user says "done," the agent validates:
+
+```
+Agent calls: hetzner_find_network_by_name("htz-prod-network")
+
+✅ Found: Network "htz-prod-network" (id: 456)
+   IP range: 10.0.0.0/16 ✓
+   Subnets: 3 configured ✓
+   Location: eu-central ✓
+
+Network confirmed. Moving to the next step.
+```
+
+If validation fails:
+
+```
+Agent calls: hetzner_find_network_by_name("htz-prod-network")
+
+❌ Not found. The network doesn't exist yet on Hetzner.
+
+Either the name is different (check for typos) or the creation didn't go through.
+Can you check the Hetzner console → Networks and tell me what you see?
+```
+
+If config is wrong:
+
+```
+✅ Found: Network "htz-prod-network"
+❌ IP range is 10.0.0.0/8 — should be 10.0.0.0/16.
+
+This matters because other services expect the /16 range.
+You'll need to delete this network and recreate it with the correct range.
+Delete: go to Networks → htz-prod-network → Delete.
+Then re-create with IP range: 10.0.0.0/16.
+```
+
+### 3.6 — Conversation Design
+
+The agent is direct and specific. It always references the user's actual
+resource names. It explains gaps honestly and asks for decisions rather
+than making assumptions.
+
+Bad (what the agent must NOT sound like):
+> "I'll help you migrate your AWS resources to Hetzner. First, let's set
+> up the networking layer, which is an important foundation..."
+
+Good:
+> "Let's start with the network. Everything else depends on it existing first.
+> Your VPC (vpc-0abc123, CIDR 10.0.0.0/16) had 3 subnets. Create a Hetzner
+> Network with the same structure. Here's exactly what to do."
+
+When there is a gap:
+> "Lambda has no managed equivalent on Hetzner. Your 4 Lambda functions
+> (prod-auth, prod-api, prod-resize, prod-notify) would need to run either
+> as containerised services in K3s, or using OpenFaaS on top of K3s.
+> Both work, but they're a medium-to-high effort migration.
+> Options: A) Set up K3s + OpenFaaS now (I'll walk you through it — ~45 min).
+>          B) Skip for this session and come back to it.
+>          C) Skip Lambda entirely and refactor to containers.
+> What do you want to do?"
+
+When the user confirms a step:
+> "✅ Confirmed — htz-prod-db exists on Hetzner (PostgreSQL 15, CPX21).
+> That replaces your RDS instance prod-db (db.t4g.medium, postgres14).
+> Marked as complete. Next: migrate the data.
+>
+> Your database is empty on Hetzner right now. You'll need to dump from AWS
+> and restore here. Run these commands from a server that can reach both:
+>
+>   pg_dump -h prod-db.xxx.eu-central-1.rds.amazonaws.com -U postgres myapp > myapp.sql
+>   psql -h 1.2.3.4 -U postgres myapp < myapp.sql
+>
+> The Hetzner DB host is: 1.2.3.4 (from the console → Databases → htz-prod-db → Connection).
+> Tell me when the restore is done."
+
+### 3.7 — Context Injection (System Prompt)
+
+At the start of each session, a rich context is injected. The agent must
+always operate from this context — not from generic AWS or Hetzner knowledge.
+
+```
+You are the Noblinks Guide migration assistant.
+You are helping {user.name} migrate their AWS infrastructure to Hetzner Cloud.
+
+EXECUTION MODEL:
+- You guide the user. The user creates resources. You never create resources.
+- You validate using read-only Hetzner API tools.
+- After every step, validate before proceeding.
+- Be direct. Reference the user's actual resource names and configs.
+- Explain WHY before explaining WHAT.
+- When there is a gap, present options and ask. Do not assume.
+
+== THEIR AWS ARCHITECTURE ==
+{N resources, N dependencies. Summary from Glance.}
+
+== MIGRATION BLUEPRINT ==
+{All ResourceMappings with migrationStatus and targetSpec.}
+
+== CURRENT HETZNER STATE ==
+{All resources currently on Hetzner, read from API at session start.}
+
+== PROGRESS ==
+Wave {N} in progress.
+Completed: {list of confirmed resources}
+Pending this wave: {list}
+
+== COMPLIANCE CONTEXT ==
+{Active Lens compliance flags — CLOUD Act, GDPR, EU AI Act, etc.}
+Reference these when relevant (e.g., "This replaces Cognito — your GDPR
+identity data flag is cleared once Keycloak is running on Hetzner."}
+
+== GAPS AND DECISIONS ==
+{List of gap decisions the user has already made for this blueprint.}
+```
+
+### 3.8 — Session Persistence
+
+Sessions are persistent across browser closes.
+
+On session start:
+1. Re-fetch current Hetzner state (read API)
+2. Compare to blueprint — recalculate what's done, what's pending
+3. Re-orient the user: "Welcome back. Last time we confirmed the network and
+   2 servers. Today let's continue with the managed database."
+
+This means the source of truth for "what's done" is the combination of:
+- Hetzner API state (what actually exists)
+- Blueprint migrationStatus (what the user confirmed)
+
+If Hetzner state and blueprint status disagree (resource was deleted after
+being marked complete), the agent flags it: "htz-prod-server-01 was marked
+complete but I can't find it on Hetzner. Did you delete it?"
+
+### 3.9 — Technical Implementation
+
+- **AI model**: Claude Sonnet 4.6 via Anthropic API, Vercel AI SDK 5 streaming
+- **Tool use**: Vercel AI SDK `tool()` with Zod schemas, read-only tools only
+- **Streaming**: Server-Sent Events for real-time agent output
+- **Hetzner SDK**: `hcloud` npm package (official TypeScript SDK)
+
+Backend route: `POST /api/guide/agent/[sessionId]`
+- Accepts user message
+- Injects blueprint + Hetzner state as system context
+- Streams agent response
+- Tool calls are read-only — no approval gate needed, no pause required
+
+Frontend:
+- Split-pane layout: conversation on left, blueprint progress on right
+- Blueprint panel updates as resources are validated + marked complete
+- Each step shows: instructions + config values pre-filled from Blueprint
+- "Skip this resource" always available
+- "Mark as complete manually" override if user has done something the agent
+  cannot validate via API (e.g., DNS at external registrar)
+
+---
+
+## PHASE 4 — Post-Migration Checklist
+
+Generated when all waves are complete (or user skips remaining items):
+
+```
+Pre-cutover
+  □ Verify all Hetzner servers are running and reachable (agent can check)
+  □ Run your test suite against Hetzner endpoints
+  □ Verify database row counts match source (run: SELECT COUNT(*) on both)
+  □ Test authentication end-to-end (if Cognito → Keycloak migration done)
+  □ Confirm SSL certificates active and auto-renewing (Let's Encrypt)
+  □ Review Hetzner Firewall rules against your security requirements
+
+DNS Cutover (do not rush this)
+  □ Lower TTL to 60s on all relevant DNS records — do this 24h before cutover
+  □ Update A/AAAA records to point to Hetzner IPs
+  □ Monitor error rates for 30 minutes post-cutover
+  □ Keep AWS resources running for 72h post-cutover as rollback option
+
+Post-Cutover
+  □ Confirm AWS traffic has dropped to zero (check ALB request count)
+  □ Update monitoring dashboards to point to Hetzner endpoints
+  □ Archive AWS configuration (export Terraform state, save configs)
+
+Cleanup — wait 30 days, then:
+  □ Delete AWS resources in reverse wave order (wave 4 first, wave 1 last)
+  □ Revoke Lens IAM role (no longer needed once off AWS)
+  □ Close AWS account if no longer needed
+  □ Run a Lens re-scan against the Hetzner account to confirm improved score
+```
+
+---
+
+## PHASE 5 — UI Pages
+
+```
+/guide                              → Overview: active blueprint, migration progress bar
+/guide/blueprints                   → List of blueprints (one per migration project)
+/guide/blueprints/new               → Create blueprint from Glance export
+/guide/blueprints/[id]              → Blueprint detail:
+                                        - Resource mapping table (grouped by wave)
+                                        - Gap analysis and decisions
+                                        - Cost estimate (AWS vs Hetzner)
+                                        - "Start agent session" button
+/guide/blueprints/[id]/resources    → Searchable resource mapping list with statuses
+/guide/blueprints/[id]/waves        → Wave-by-wave swimlane view
+/guide/blueprints/[id]/gaps         → Gap decisions: workaround / skip / accept
+/guide/session/[sessionId]          → Agent session interface:
+                                        Left: conversation
+                                        Right: blueprint progress (live updates)
+                                        Step panel: instructions + config values
+/guide/guides/[slug]                → Static migration guide reader:
+                                        Checkboxes per step (persistent)
+                                        Pre-filled values from Blueprint
+                                        Copy-to-clipboard commands
+/guide/settings                     → Hetzner API token (session-only, never stored)
+```
+
+---
+
+## PHASE 6 — Database Schema
+
+```
+guide_blueprint table:
+  id, userId, organizationId, label
+  sourceCloud, targetCloud
+  lensScore, glanceExportId
+  status ("draft" | "ready" | "in_progress" | "complete")
+  migrationProgress (int, 0–100)
+  networkPlan (JSONB)
+  gapAnalysis (JSONB)         // gap decisions per resource
+  costEstimate (JSONB)
+  createdAt, updatedAt
+
+guide_resource_mapping table:
+  id, blueprintId, userId
+  sourceResourceId, sourceService, sourceName, sourceConfig (JSONB)
+  targetService, targetName, targetSpec (JSONB)
+  equivalenceType, equivalenceNotes
+  migrationWave, migrationEffort
+  migrationStatus ("pending" | "in_progress" | "complete" | "skipped")
+  hetznerResourceId (int, nullable)   // set after validation confirms it exists
+  hetznerResourceType (text, nullable)
+  validatedAt (timestamp, nullable)   // when agent last confirmed it exists
+  staticGuide, customInstructions
+  createdAt, updatedAt
+
+guide_session table:
+  id, blueprintId, userId
+  currentWave, currentStep
+  status ("active" | "paused" | "complete")
+  messages (JSONB — last 50 messages for context)
+  stepChecklist (JSONB — per-guide step completion per resource)
+  createdAt, updatedAt
+
+  Note: Hetzner API token is NOT stored here or anywhere in the DB.
+  It is held in an encrypted server-side session store (Redis) for the
+  duration of the browser session only. It expires when the session ends.
+  This is non-negotiable.
+
+guide_validation_log table:
+  id, sessionId, resourceMappingId, userId
+  toolName                        // which read tool was called
+  hetznerResponseSummary (JSONB)  // sanitised result (IDs, status — no secrets)
+  outcome ("confirmed" | "not_found" | "config_mismatch" | "error")
+  validatedAt
+```
+
+---
+
+## PHASE 7 — Expanding Beyond Hetzner
+
+v1: Hetzner only. This is the right call — focus builds quality.
+
+v2 target clouds (same agent architecture, new tool implementations + guides):
+- OVHcloud
+- Scaleway
+- IONOS Cloud
+- Exoscale
+- UpCloud
+- Open Telekom Cloud
+
+For each new target cloud:
+1. New read-only tool set for that cloud's API
+2. New CLOUD_MAPPING table entries for that cloud's services
+3. New static guides per service per cloud
+4. Updated pricing engine for that cloud
+
+The agent architecture, execution model, and UI are cloud-agnostic from v1.
+
+---
+
+## PHASE 8 — Product Positioning
+
+**Who this is for:** DevOps engineers and infrastructure leads who are
+executing the migration. Not the CEO (that's Lens). Not just planners —
+people who actually open a terminal.
+
+**What makes them pay:**
+- Blueprint alone saves 10+ hours of architecture planning per migration
+- Agent mode replaces a migration consultant for most of the journey
+- Market rate for a cloud migration consultant: €150–300/hour
+- Guide at €199/month is less than one day of consultant time
+
+**What makes them stick:**
+- The blueprint is tied to their specific infrastructure — not generic
+- Progress is persistent — sessions resume exactly where they left off
+- Post-migration: run a Lens re-scan on the Hetzner account to confirm score
+- If they add services later, they come back to Guide for the next wave
+
+---
+
+## Open Questions
+
+1. **Hetzner API token scope**: Recommend the user creates a read-only API token
+   specifically for Guide sessions. The agent should provide instructions for
+   creating a minimal-scope token (read-only project permissions) rather than
+   accepting a full-access token.
+
+2. **Steps the API cannot validate**: DNS cutover at external registrars, data
+   migration completeness (row counts must be user-verified), SSL certificate
+   issuance timing. For these steps, the agent provides instructions and a
+   "Mark as done manually" button. Clear documentation of which steps are
+   manually confirmed vs API-validated.
+
+3. **K3s complexity**: EKS → K3s is the most complex guide. Includes cloud-init
+   scripts, node joining, KUBECONFIG setup, Hetzner Cloud Controller Manager for
+   dynamic volumes. Consider shipping v1 without Kubernetes workaround and flagging
+   EKS as "manual migration — contact us" to avoid a poor first experience.
+
+4. **Data migration**: Guide provides the pg_dump / pg_restore commands with the
+   exact connection strings from the Blueprint. It cannot verify data integrity
+   beyond checking the database exists. Row count verification is explicitly a
+   user responsibility with clear instructions.
+
+5. **Pricing model**: Blueprint access at lower tier (€79/month), agent sessions
+   at higher tier (€199/month)? Or flat pricing? Pay-per-session risks users
+   feeling the meter running during a stressful migration — flat monthly is
+   probably the right call for trust.

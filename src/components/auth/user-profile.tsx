@@ -25,14 +25,11 @@ export function UserProfile() {
 
   if (!session) {
     return (
-      <div className="flex items-center gap-2">
-        <Link href="/login">
-          <Button variant="ghost" size="sm">
-            Sign in
-          </Button>
-        </Link>
-        <Button size="sm" disabled>Sign up</Button>
-      </div>
+      <Link href="/login">
+        <Button variant="ghost" size="sm">
+          Sign in
+        </Button>
+      </Link>
     );
   }
 

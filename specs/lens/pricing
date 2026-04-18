@@ -1,0 +1,219 @@
+# Noblinks Lens — Pricing Strategy
+
+---
+
+## Core Pricing Principle
+
+The value of Lens is not in reading the report — it is in the
+decision confidence it creates. A company spending €15k/month on AWS
+can justify €500/month for a tool that tells them whether migration
+to Hetzner (saving €10k/month) will succeed or destroy their product.
+
+Price to the value of the decision, not the cost of the API calls.
+
+---
+
+## Pricing Model: Tiered Subscription + Per-Analysis Credits
+
+Rationale:
+- Subscription anchors the product as a recurring tool, not a one-time report
+- Credits give flexibility without a seat model (seats don't fit — it's one
+  analysis per architecture, not per user per day)
+- Free tier drives top-of-funnel; enterprise tier captures high-value accounts
+- Credits carry over (no monthly reset anxiety) — customers buy when they need
+
+---
+
+## Tiers
+
+### FREE — €0/month
+
+For: Individual engineers evaluating Lens. No credit card required.
+
+Includes:
+- 1 analysis per month
+- IAM role input only
+- Up to 10 AWS services discovered
+- Hetzner as target cloud only
+- Basic report: score + service table
+- No AI executive summary
+- No PDF export
+- No team access
+- Reports retained for 30 days
+
+Purpose: Remove all friction from first use. The report itself is the
+sales motion — seeing your own infrastructure mapped against Hetzner
+is more convincing than any marketing copy.
+
+---
+
+### STARTER — €49/month (billed annually: €39/month)
+
+For: Startups and engineering teams actively evaluating a migration.
+
+Includes everything in Free, plus:
+- 5 analyses/month (extra credits: €9 each)
+- All input methods: IAM role, Terraform upload, Helm upload
+- All discovered AWS services (full 19-service MVP)
+- Hetzner + 1 additional sovereign cloud (OVHcloud or Scaleway)
+- AI executive summary on each report
+- PDF export
+- Reports retained for 1 year
+- 2 team seats (share reports, not analysis runs)
+- Email support
+
+Who buys this:
+A 10–30 person startup with AWS bills starting to hurt. They want a
+clear answer before spending engineering time scoping a migration.
+
+---
+
+### GROWTH — €149/month (billed annually: €119/month)
+
+For: Scale-ups running multiple products or environments on AWS.
+
+Includes everything in Starter, plus:
+- 20 analyses/month (extra credits: €7 each)
+- All 6 sovereign clouds (Hetzner, OVHcloud, Scaleway, AWS EU Sovereign,
+  Google Sovereign, Azure Sovereign)
+- Side-by-side multi-cloud comparison report
+- Full AI layer: executive summary + per-service gap explanations +
+  alternatives + priority-ordered migration plan
+- Rule engine violations panel (SaaS lock-in, structural risks)
+- Drift detection: re-run same account monthly, flag new services added
+  since last analysis
+- 10 team seats
+- Slack/webhook notifications for drift alerts
+- Priority email support (24h response)
+
+Who buys this:
+A 50–200 person company with multiple AWS accounts, a CTO who has been
+told to reduce cloud spend or improve data sovereignty compliance, and
+an engineering team that needs a structured plan — not just a gut feeling.
+
+---
+
+### ENTERPRISE — Custom (starting ~€500/month)
+
+For: Companies with complex AWS footprints, compliance requirements,
+or internal security constraints that prevent sharing an IAM role.
+
+Includes everything in Growth, plus:
+- Unlimited analyses
+- Multi-account AWS discovery (scan multiple AWS accounts in one report)
+- CLI Export mode: customer runs the scanner locally, uploads results —
+  no IAM role granted to Noblinks
+- Custom catalog entries: add internal SaaS tools, proprietary services,
+  or target clouds not in the standard catalog
+- Private deployment option (run Lens in customer's own infrastructure)
+- SSO / SAML authentication
+- Audit log: full record of who ran what analysis and when
+- SLA: 99.9% uptime, dedicated support channel
+- Quarterly catalog review: Noblinks team updates catalog entries for
+  new Hetzner/OVHcloud services relevant to the account
+- Unlimited team seats
+- Custom contract + DPA (Data Processing Agreement for GDPR)
+
+Who buys this:
+A financial services or healthcare company in Germany or the Netherlands
+that has been audited and needs documented evidence that their migration
+plan is based on structured, reproducible analysis — not an AI chatbot.
+
+---
+
+## Credit System
+
+Analyses beyond plan limits are purchased as one-off credits:
+
+| Plan       | Included  | Extra credit price |
+|------------|-----------|--------------------|
+| Free       | 1/month   | N/A (upgrade)      |
+| Starter    | 5/month   | €9 each            |
+| Growth     | 20/month  | €7 each            |
+| Enterprise | Unlimited | N/A                |
+
+Credits do not expire. Unused monthly included credits reset.
+Purchased extra credits carry over indefinitely.
+
+---
+
+## What Counts as One Analysis
+
+One analysis = one AWS account scanned against one or more target clouds.
+
+- Re-running the same account = a new analysis (credits consumed)
+- Viewing a past report = free, no credit consumed
+- Changing only the target cloud on an existing scan = new analysis
+  (data is re-scored, not re-discovered, but counts as a new run)
+
+Rationale: each run reflects a point-in-time snapshot of the account.
+As infrastructure changes, the analysis becomes stale. Running again is
+the core recurring action — it should cost credits to create that habit.
+
+---
+
+## Annual vs Monthly
+
+Annual plans offered at ~20% discount.
+Annual billed upfront — creates committed ARR, reduces churn.
+Monthly available for Starter and Growth (no discount).
+Enterprise is always annual contract.
+
+---
+
+## Competitive Positioning
+
+| Tool                | What it does                                         | Price                    |
+|---------------------|------------------------------------------------------|--------------------------|
+| AWS Migration Hub   | AWS-to-AWS only, no EU sovereign cloud support       | Free (AWS-locked)        |
+| CloudQuery          | Raw data extraction, no compatibility analysis       | Open source / enterprise |
+| Steampipe           | SQL queries on cloud data, no scoring                | Open source / enterprise |
+| Manual consultant   | Expensive, slow, non-reproducible                    | €5k–€50k/engagement      |
+| **Noblinks Lens**   | **Deterministic EU sovereignty analysis in minutes** | **€49–custom**           |
+
+The closest competitor is a consultant engagement costing €5k–€50k
+and taking 4–8 weeks. Lens does it in 60 seconds for €49/month.
+That is the comparison to lead with in sales.
+
+---
+
+## Freemium Conversion Path
+
+Free → Starter trigger: user has run 1 free analysis and wants to:
+  - Try a different input method (Terraform)
+  - Compare against OVHcloud, not just Hetzner
+  - Get the AI executive summary (the most visible locked feature)
+  - Share the report with their team
+
+Starter → Growth trigger: user has a multi-environment AWS setup
+(dev/staging/prod) and needs 3+ analyses. Or they want multi-cloud
+comparison to inform which EU sovereign cloud to choose.
+
+Growth → Enterprise trigger: procurement, legal, or security team
+gets involved. They need a DPA, audit logs, no IAM role sharing,
+or a custom target cloud.
+
+---
+
+## What NOT to Do
+
+- Do not price per seat — this is not a daily-use tool like Jira.
+  Seats add friction without matching how customers think about value.
+- Do not price purely per-report — it trains customers to treat it as
+  a one-off tool and kills recurring revenue.
+- Do not offer a free trial of paid tiers — the free tier is the trial.
+  It produces a real report with real data. That is better than any trial.
+- Do not discount heavily for startup programs — the value signal is high
+  even for startups. Offer a startup application process with a fixed 50%
+  discount for verified early-stage companies, but keep list price firm.
+
+---
+
+## Launch Strategy
+
+Phase 1 (now):    Free + Starter only. Validate willingness to pay.
+Phase 2 (3–6mo):  Add Growth when drift detection is built.
+Phase 3 (6–12mo): Enterprise when multi-account + SSO + CLI export are ready.
+
+Do not launch all tiers at once. The free + one paid tier model
+reduces decision paralysis and focuses the team on one conversion goal.

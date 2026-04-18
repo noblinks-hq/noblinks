@@ -1,0 +1,508 @@
+# Noblinks Glance — Implementation Plan
+# Cloud Inventory & Architecture Dependency Mapping
+# Last updated: April 2026
+
+## Product Suite
+
+  Lens   → `specs/lens/implementation plan`   — "Are you ready to migrate?"
+  Glance → `specs/glance/implementation plan` — "What do I have and how does it connect?" (this file)
+  Guide  → `specs/guide/implementation plan`  — "Let me walk you through building it on Hetzner."
+
+Glance sits between Lens and Guide. It receives the detected resources from Lens
+and produces the dependency graph + migration wave plan that Guide needs to
+generate a correct, sequenced migration blueprint.
+
+---
+
+## Core Truth
+
+Glance answers one question:
+
+> "What do I actually have, and how does it all connect?"
+
+You cannot migrate what you don't understand. Lens tells you IF you can migrate.
+Glance shows you WHAT to migrate — and crucially, in what ORDER, because moving
+a service before its dependencies destroys production.
+
+The output of Glance is the input to Guide (Migration Blueprint + AI Agent).
+
+---
+
+## Why This Is Hard (And Why It's Valuable)
+
+AWS does not expose a dependency graph API. Dependencies must be inferred
+from multiple signals simultaneously:
+
+- Security group membership → services that can talk to each other
+- Subnet co-location → likely network neighbours
+- IAM role assignments → which compute touches which data
+- Environment variables → Lambda DATABASE_URL pointing to an RDS endpoint
+- Event source mappings → Lambda triggered by SQS, DynamoDB streams, Kinesis
+- Load balancer target groups → which EC2s sit behind which ALB
+- ECS / EKS task definitions → which container images, secrets, env vars
+- RDS read replica relationships → replica → primary
+- S3 bucket policies and event notifications → who reads/writes which bucket
+- EventBridge rules → source services and their targets
+- VPC peering → cross-VPC connections
+- Service discovery (Cloud Map, private Route 53 zones)
+
+No tool in the market builds this graph automatically and makes it
+human-readable. That's the gap.
+
+---
+
+## The Product Loop
+
+```
+Discover → Map → Visualise → Plan Migration Waves → Track Changes
+```
+
+1. Connect AWS account (re-uses Lens IAM role — no new credentials needed)
+2. Glance discovers every resource (extends Lens detection, not duplicates it)
+3. Glance infers dependency edges between resources
+4. User sees a live architecture graph — nodes are resources, edges are
+   dependency types (network / IAM / data / event / storage)
+5. User can create named Architecture Snapshots
+6. On re-scan: drift is surfaced (new resources, removed resources, new connections)
+7. Glance outputs a Migration Wave Plan — ordered list of what to move when,
+   based on the dependency graph topology
+8. Migration Wave Plan feeds directly into Noblinks Guide
+
+---
+
+## PHASE 1 — Data Model
+
+### 1.1 — Resource Model (richer than Lens)
+
+Glance needs more detail per resource than Lens:
+
+```ts
+interface GlanceResource {
+  id: string                    // internal UUID
+  cloudId: string               // AWS resource ID (e.g. "i-0abc123", "arn:...")
+  service: string               // "ec2", "rds", "lambda", etc.
+  name: string | null           // human-readable name (from tags or API)
+  type: string | null           // e.g. "t3.large", "db.r6g.large", "nodejs18.x"
+  region: string
+  accountId: string
+  sourceCloud: "aws" | "gcp" | "azure"
+  tags: Record<string, string>  // AWS resource tags — valuable for grouping
+  config: Record<string, unknown> // full config snapshot (security groups, subnet, etc.)
+  stateful: boolean             // databases, EFS, S3 = true; Lambda, EC2 = false
+  criticality: "high" | "medium" | "low"  // inferred from service type + usage
+  firstSeenAt: string
+  lastSeenAt: string
+  removedAt: string | null
+}
+```
+
+### 1.2 — Dependency Model
+
+```ts
+interface GlanceDependency {
+  id: string
+  fromResourceId: string        // points to GlanceResource.id
+  toResourceId: string
+  type: DependencyType
+  confidence: "confirmed" | "inferred"
+  evidence: string              // e.g. "shared security group sg-abc123"
+  direction: "unidirectional" | "bidirectional"
+  critical: boolean             // if this edge breaks, the fromResource likely fails
+}
+
+type DependencyType =
+  | "network"           // same VPC, security group, subnet
+  | "iam"               // IAM role grants access to resource
+  | "data"              // reads/writes to database or storage
+  | "event"             // SQS trigger, EventBridge rule, Kinesis consumer
+  | "compute"           // Lambda backed by container in ECR, ECS pulling from ECR
+  | "dns"               // service resolved via Route 53 or Cloud Map
+  | "replica"           // RDS read replica → primary
+  | "storage"           // mounts EFS, uses S3 bucket
+  | "secret"            // reads from Secrets Manager, Parameter Store
+```
+
+### 1.3 — Architecture Snapshot
+
+```ts
+interface ArchitectureSnapshot {
+  id: string
+  userId: string
+  organizationId: string
+  accountId: string
+  label: string               // user-defined: "Before migration v1", "Post-Lambda removal"
+  resourceCount: number
+  dependencyCount: number
+  resources: GlanceResource[]
+  dependencies: GlanceDependency[]
+  migrationWaves: MigrationWave[]
+  createdAt: string
+}
+
+interface MigrationWave {
+  wave: number                  // 1 = move first, higher = move later
+  resources: string[]           // GlanceResource.id[]
+  rationale: string             // "These services have no incoming dependencies"
+  estimatedEffort: "low" | "medium" | "high"
+  blockers: string[]            // what must be migrated first
+}
+```
+
+### 1.4 — Database Schema
+
+```
+glance_resource table:
+  id, userId, organizationId, accountId, sourceCloud
+  cloudId, service, name, type, region
+  stateful, criticality, tags (JSONB), config (JSONB)
+  firstSeenAt, lastSeenAt, removedAt
+  createdAt, updatedAt
+
+glance_dependency table:
+  id, userId, organizationId, accountId
+  fromResourceId (→ glance_resource.id)
+  toResourceId (→ glance_resource.id)
+  type, confidence, evidence, direction, critical
+  createdAt, updatedAt
+
+glance_snapshot table:
+  id, userId, organizationId, accountId, label
+  resourceCount, dependencyCount
+  resources (JSONB), dependencies (JSONB), migrationWaves (JSONB)
+  createdAt
+```
+
+---
+
+## PHASE 2 — Discovery (Richer than Lens)
+
+Lens detects the presence of 91 service types (counts only).
+Glance needs the full resource detail for every instance.
+
+### 2.1 — Resource Harvester
+
+For each detected service, harvest full detail:
+
+- **EC2**: instance ID, type, AMI, VPC ID, subnet ID, security groups, key pair,
+  public IP, private IP, IAM instance profile, tags, state
+- **RDS**: instance ID, engine + version, instance class, VPC ID, subnet group,
+  security groups, parameter group, option group, multi-AZ, read replica source
+- **Lambda**: function ARN, runtime, handler, memory, timeout, VPC config
+  (if VPC-attached: subnet IDs, security groups), environment variables (keys only,
+  not values — do not log secrets), IAM role ARN, event source mappings
+- **ECS**: cluster ARN, service ARNs, task definitions (image, environment keys,
+  secrets references, port mappings, log config), IAM task role, IAM execution role
+- **EKS**: cluster ARN, nodegroup configs (instance type, desired size), addons,
+  IAM roles for service accounts (IRSA)
+- **S3**: bucket name, region, ACL, versioning, replication config, lifecycle rules,
+  bucket policy (redacted), event notifications, CORS config
+- **SQS**: queue URL, type (standard/fifo), visibility timeout, dead-letter queue ARN,
+  Lambda event source mapping ARNs
+- **EventBridge**: rule name, schedule/event pattern, targets (ARN + input)
+- **ALB/NLB**: ARN, scheme, VPC, listeners (port/protocol), target groups
+  (target type, targets = EC2 IDs or Lambda ARNs or IPs)
+- **Cognito**: user pool ID, app clients, identity pool ID, IAM role associations
+- **SecretsManager**: secret ARN, name, resource policy (which IAM entities have access)
+
+### 2.2 — Config Deep-Fetcher
+
+For dependency inference, additional API calls are required:
+
+- `GetRolePolicy` / `ListAttachedRolePolicies` → which resources does each IAM role access?
+- `DescribeListenerRules` → ALB routing rules (path-based routing to multiple target groups)
+- `ListEventSourceMappings` → Lambda triggers (SQS, DynamoDB streams, Kinesis, MSK)
+- `GetBucketNotificationConfiguration` → S3 events → Lambda/SQS/SNS
+- `DescribeDBClusters` → Aurora cluster members + read replicas
+- `DescribeReplicationGroups` → ElastiCache replication
+- `ListTargetsForRule` → EventBridge rule targets
+
+All calls are read-only. Credentials = same IAM role used by Lens.
+
+---
+
+## PHASE 3 — Dependency Inference Engine
+
+`src/lib/glance/dependency-engine.ts`
+
+### 3.1 — Network Dependencies (high confidence)
+
+Algorithm:
+1. Build a map of security group → resources (EC2, RDS, Lambda-in-VPC, ECS, EKS)
+2. For each security group inbound rule referencing another security group:
+   - Create `DependencyType.network` edge from source SG's resources to target SG's resources
+   - Confidence: "confirmed" (security groups are explicit intent)
+3. Resources in the same VPC without direct SG references: confidence "inferred"
+
+```ts
+// Example output:
+// EC2 i-abc → RDS db-xyz (type: "network", evidence: "sg-111 allows sg-222")
+// ECS service → RDS db-xyz (type: "network", evidence: "same security group sg-333")
+```
+
+### 3.2 — IAM Dependencies (high confidence)
+
+Algorithm:
+1. For each Lambda, EC2 instance profile, ECS task role, EKS IRSA role:
+   - Parse attached policies for resource ARN patterns:
+     - `arn:aws:dynamodb:*:*:table/MyTable` → this compute depends on DynamoDB MyTable
+     - `arn:aws:s3:::my-bucket` → this compute depends on S3 bucket my-bucket
+     - `arn:aws:secretsmanager:*:*:secret:prod/db-password*` → depends on this secret
+     - `arn:aws:sqs:*:*:my-queue` → depends on SQS queue
+   - Create `DependencyType.iam` edges for each matched resource
+2. Note: wildcard policies (`*`) create "inferred" edges to all resources of that type
+
+### 3.3 — Event Source Mappings (confirmed)
+
+Algorithm:
+1. `ListEventSourceMappings` returns the complete list: Lambda ← SQS, Kinesis, DynamoDB streams
+2. For each mapping:
+   - Create `DependencyType.event` edge from source → Lambda (direction: "unidirectional")
+   - Mark `critical: true` (Lambda only runs if source is available)
+3. EventBridge rules: for each rule, create edges from implicit trigger source → each target ARN
+4. S3 notifications: for each bucket notification, create edge from S3 → Lambda/SQS/SNS
+
+### 3.4 — Load Balancer → Compute Dependencies (confirmed)
+
+Algorithm:
+1. For each ALB/NLB, list all target groups
+2. For each target group, list registered targets (EC2 instance IDs, Lambda ARNs, IPs)
+3. Create `DependencyType.network` edge: ALB → each registered target
+4. For ECS services with ALB integration: ECS service → ALB (service registers its tasks)
+
+### 3.5 — Container Image Dependencies (confirmed)
+
+Algorithm:
+1. For each ECS task definition: extract container image URI
+2. For each EKS nodegroup: describe running pods (if API access allows)
+3. Match image URIs to ECR repositories
+4. Create `DependencyType.compute` edge: ECS service → ECR repo, EKS cluster → ECR repo
+
+### 3.6 — Database Replication Dependencies (confirmed)
+
+Algorithm:
+1. `DescribeDBInstances` returns `ReadReplicaSourceDBInstanceIdentifier`
+2. Create `DependencyType.replica` edge: replica → primary (critical: true)
+3. For Aurora clusters: all instances → cluster endpoint (bidirectional)
+4. ElastiCache replication groups: replicas → primary node
+
+### 3.7 — Secret Dependencies (inferred)
+
+Algorithm:
+1. For each Lambda's environment variables: extract keys referencing known patterns
+   (`DB_SECRET_ARN`, `SECRET_NAME`, `PARAMETER_PATH`)
+2. For each ECS task: extract secretsManager references in `secrets` array
+3. Match to SecretsManager ARNs
+4. Create `DependencyType.secret` edge (confidence: varies — ARNs = confirmed, env var patterns = inferred)
+
+### 3.8 — Confidence Scoring
+
+Each edge gets a confidence score:
+- "confirmed" = explicit API evidence (IAM policy with specific ARN, event source mapping, LB target)
+- "inferred" = pattern matching, same VPC, same security group without explicit rule
+
+In the UI: confirmed edges shown as solid lines, inferred as dashed.
+
+---
+
+## PHASE 4 — Migration Wave Planner
+
+`src/lib/glance/wave-planner.ts`
+
+Input: the dependency graph (directed acyclic graph, or DAG approximation)
+
+Algorithm: topological sort with criticality weighting
+
+```
+Wave 1 — Leaf nodes (no incoming critical dependencies)
+  - S3 buckets (data storage, no incoming edges from other services)
+  - Route 53 DNS records
+  - IAM roles / KMS keys / Secrets (infrastructure primitives)
+  - SQS queues (consumers depend on them, not vice versa)
+
+Wave 2 — Services that only depend on Wave 1 resources
+  - Databases (RDS, ElastiCache, DynamoDB) — depend only on VPC + secrets
+  - ECR repositories
+
+Wave 3 — Compute services that depend on Wave 2
+  - Lambda functions (depend on databases, SQS, S3)
+  - ECS services (depend on databases, ECR, secrets)
+  - EKS cluster (depends on ECR, databases)
+
+Wave 4 — Traffic routing (depends on compute being live)
+  - ALB / NLB
+  - CloudFront (if applicable → replace with EU CDN)
+  - API Gateway (depends on Lambda)
+
+Wave 5 — Supporting services (can migrate last)
+  - CloudWatch log groups → target cloud logging
+  - IAM users / cross-account roles
+  - SSM Parameter Store
+```
+
+Output per wave:
+- Ordered list of resources
+- Estimated migration effort (low/medium/high) per resource
+- Blockers: "do not migrate this until wave N is complete"
+- EU cloud recommendation: best-fit from Lens analysis for this resource type
+
+---
+
+## PHASE 5 — Visualisation
+
+### 5.1 — Architecture Graph
+
+Technology: React + `@xyflow/react` (React Flow) — excellent for node/edge graphs,
+well-maintained, used in production by major tools.
+
+Layout algorithm: `dagre` (hierarchical layout) or ELK.js for large graphs.
+
+Nodes:
+- Icon = service type (EC2 server icon, RDS database icon, Lambda function icon, etc.)
+- Color = migration status (grey = not started, blue = planned, amber = in progress, green = migrated)
+- Border = criticality (red border = high, no border = low)
+- Label = resource name
+- Click → resource detail panel (right sidebar)
+
+Edges:
+- Solid line = confirmed dependency
+- Dashed line = inferred dependency
+- Color = dependency type (blue = network, purple = IAM, green = data, orange = event)
+- Label = dependency type on hover
+- Arrow direction = data/control flow direction
+
+Controls:
+- Filter by service type (show only databases + their consumers)
+- Filter by VPC / subnet
+- Filter by migration wave (show only wave 2)
+- Group by: service type / VPC / tag / migration wave
+- Zoom to fit / zoom to selection
+- Fullscreen mode
+
+### 5.2 — Migration Wave View
+
+Alternative to the graph: a swimlane view grouped by wave.
+
+Wave 1 | Wave 2 | Wave 3 | Wave 4 | Wave 5
+[S3]   | [RDS]  | [Lambda] | [ALB] | [CloudWatch]
+[SQS]  | [ECR]  | [ECS]    | [CF]  | [IAM]
+       |        | [EKS]    |       |
+
+Click any resource → detail panel.
+Drag resource between waves → override wave assignment (with warning if it breaks dependency order).
+
+### 5.3 — Resource Detail Panel
+
+Right-side panel, appears on resource click:
+- Resource name, type, ID, region
+- Configuration summary (key fields, no secrets)
+- Compliance flags from Lens compliance engine
+- Incoming dependencies (what depends on this resource)
+- Outgoing dependencies (what this resource depends on)
+- Migration status (not started / planned / in progress / complete)
+- Lens compatibility: compatible/partial/none for each target EU cloud
+- Button: "Add to Guide blueprint" → triggers blueprint generation for this resource
+
+---
+
+## PHASE 6 — Change Detection
+
+### 6.1 — Drift Detection
+
+On every re-scan, compare to the previous snapshot:
+
+NEW resources:
+- "14 new resources detected since last scan"
+- Immediately check: do any new resources break the dependency graph or create new compliance flags?
+- Alert if: new resource has a critical compliance flag (e.g., new Rekognition collection)
+
+REMOVED resources:
+- "3 resources decommissioned since last scan"
+- Check: were any of these resources dependencies for other resources?
+- Alert if: a critical dependency was removed (may indicate a production issue)
+
+NEW dependencies:
+- "New connection detected: Lambda prod-auth → RDS prod-db (event source mapping)"
+- This changes the migration wave plan — surface immediately
+
+CHANGED configuration:
+- Security group rule changes, IAM policy changes, new environment variables
+- These can change the dependency graph without adding/removing resources
+
+### 6.2 — Architecture Snapshots
+
+Users can name and save snapshots:
+- "Before migration - April 2026"
+- "Post-Lambda removal"
+- "Hybrid state (wave 1-2 on Hetzner)"
+
+Snapshots are immutable. Users can diff two snapshots:
+- Side-by-side graph view (red = in A only, green = in B only, grey = in both)
+- Summary: "47 resources added, 12 removed, 8 connection changes"
+
+---
+
+## PHASE 7 — Glance → Guide Integration
+
+Glance's primary output that feeds Guide:
+
+```ts
+interface GlanceBlueprintExport {
+  accountId: string
+  sourceCloud: "aws" | "gcp" | "azure"
+  targetCloud: string              // best-fit from Lens, or user-selected
+  exportedAt: string
+  resources: GlanceResource[]
+  dependencies: GlanceDependency[]
+  migrationWaves: MigrationWave[]
+  complianceFlags: ComplianceFlag[]  // from Lens compliance engine
+  lensScore: number
+}
+```
+
+This JSON is the "blueprint" input to Noblinks Guide's Migration Blueprint Generator.
+
+---
+
+## PHASE 8 — UI Pages
+
+```
+/glance                         → Overview: summary stats, last scan, drift alerts
+/glance/graph                   → Full-screen architecture graph
+/glance/waves                   → Migration wave swimlane view
+/glance/inventory               → Searchable/filterable resource table
+/glance/inventory/[resourceId]  → Resource detail page
+/glance/snapshots               → Named snapshots list
+/glance/snapshots/[id]          → Snapshot detail + diff view
+/glance/settings                → Scan frequency, credentials, notifications
+```
+
+---
+
+## PHASE 9 — Future
+
+- Multi-account: map cross-account dependencies (AWS Organizations)
+- GCP architecture graph
+- Azure architecture graph
+- Cross-cloud dependencies (hybrid architectures)
+- Cost attribution by cluster of connected services
+- "Impact blast radius": select a resource, see everything that would break if it went down
+- Integration with PagerDuty / OpsGenie (import on-call assignments per service cluster)
+
+---
+
+## Open Questions
+
+1. IAM policy parsing at scale: large accounts may have hundreds of roles with
+   complex policy documents. Need a performant parser — aws-sdk provides them as
+   JSON already, but the ARN pattern matching needs to be thorough.
+
+2. React Flow performance at scale: graphs with 500+ nodes need virtual rendering.
+   React Flow handles this but needs tuning. Consider clustering small services
+   into group nodes for large accounts.
+
+3. Inferred dependency false positives: "same VPC" is a weak signal. Consider
+   requiring at least 2 independent signals before showing an inferred edge.
+
+4. Cross-region dependencies: some architectures intentionally span regions
+   (Global Accelerator, CloudFront origins, RDS cross-region replicas). These
+   need special handling — they are valid but create migration complexity.

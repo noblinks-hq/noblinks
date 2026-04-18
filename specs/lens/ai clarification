@@ -1,0 +1,136 @@
+NOBLINKS LENS — AI LIMITATIONS & PRODUCT POSITIONING CONTEXT
+
+This file defines an important constraint and philosophical guideline for building Noblinks Lens.
+
+Claude (and any AI system used in development) MUST understand this clearly before generating logic, architecture, or features.
+
+====================================================
+1. CORE CONCERN
+====================================================
+
+There is a valid concern:
+
+"Could a user simply give their cloud access (e.g., IAM role) to an AI like Claude and get the same architecture compatibility report?"
+
+This concern must be explicitly addressed and designed against.
+
+====================================================
+2. KEY PRINCIPLE
+====================================================
+
+Noblinks Lens is NOT an AI wrapper.
+
+It is a:
+
+→ Deterministic Architecture Compatibility Engine
+→ Structured Knowledge System
+→ Rule-based + data-backed analysis platform
+
+AI is only used for:
+- explanation
+- summarization
+- recommendation phrasing
+
+AI is NOT the source of truth.
+
+====================================================
+3. WHY AI ALONE IS NOT SUFFICIENT
+====================================================
+
+Claude or similar models:
+
+- do NOT have reliable, up-to-date mapping of cloud services across providers
+- do NOT understand nuanced feature gaps between services
+- do NOT guarantee consistent outputs for identical inputs
+- may hallucinate equivalences (e.g., SQS ≈ Pub/Sub without caveats)
+- do NOT model compliance nuances (EU sovereignty vs EU region)
+- cannot provide deterministic scoring or reproducible results
+
+Therefore:
+
+AI-generated reports alone are:
+→ non-deterministic
+→ not auditable
+→ not enterprise-trustworthy
+
+====================================================
+4. PRODUCT DIFFERENTIATION
+====================================================
+
+Noblinks Lens provides:
+
+1. Canonical architecture normalization
+2. Capability-based service abstraction
+3. Structured compatibility catalog (AWS ↔ GCP ↔ Azure EU)
+4. Deterministic rule engine (region lock, identity lock, compliance)
+5. Weighted compatibility scoring
+6. Consistent and reproducible outputs
+
+This is the CORE VALUE.
+
+AI is only layered on top.
+
+====================================================
+5. DESIGN RULES (MANDATORY)
+====================================================
+
+When generating system design, ALWAYS:
+
+- Separate deterministic logic from AI output
+- Ensure same input always produces same structured result
+- Use AI only AFTER structured analysis is complete
+- Avoid relying on AI for service equivalence decisions
+- Prefer explicit mapping tables over inference
+- Make all scoring explainable and traceable
+
+====================================================
+6. TRUST REQUIREMENTS
+====================================================
+
+The product must be:
+
+- predictable
+- explainable
+- auditable
+- consistent across runs
+
+Because customers will use this for:
+
+- architecture decisions
+- compliance evaluation
+- migration planning
+
+AI alone cannot meet these requirements.
+
+====================================================
+7. CORRECT PRODUCT POSITIONING
+====================================================
+
+Incorrect positioning:
+→ "AI that analyzes your cloud"
+
+Correct positioning:
+→ "Architecture compatibility engine powered by structured analysis"
+
+Or:
+
+→ "AI explains. Noblinks Lens proves."
+
+====================================================
+8. FINAL GUIDELINE
+====================================================
+
+Claude should be used as:
+
+- an assistant for building the system
+- a generator for human-readable output
+
+Claude should NOT:
+
+- define the compatibility logic
+- decide equivalence between services
+- replace structured mapping systems
+
+====================================================
+END
+====================================================

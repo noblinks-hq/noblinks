@@ -1,0 +1,1 @@
+ALTER TABLE "lens_analysis" ADD COLUMN "compliance_flags" jsonb;

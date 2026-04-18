@@ -4,12 +4,6 @@ import { UserProfile } from "@/components/auth/user-profile";
 import { Button } from "@/components/ui/button";
 import { ModeToggle } from "./ui/mode-toggle";
 
-const navLinks = [
-  { label: "Product", href: "/overview" },
-  { label: "Pricing", href: "/pricing" },
-  { label: "Docs", href: "https://docs.noblinks.com" },
-];
-
 export function SiteHeader() {
   return (
     <>
@@ -36,23 +30,12 @@ export function SiteHeader() {
             <span className="font-bold text-lg tracking-tight">Noblinks</span>
           </Link>
 
-          {/* Center nav */}
-          <div className="hidden md:flex items-center gap-1">
-            {navLinks.map(({ label, href }) => (
-              <Link
-                key={label}
-                href={href}
-                className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted"
-              >
-                {label}
-              </Link>
-            ))}
-          </div>
-
           {/* Right */}
           <div className="flex items-center gap-3">
             <UserProfile />
-            <Button size="sm" disabled className="hidden sm:inline-flex">Get started</Button>
+            <Link href="/register" className="hidden sm:inline-flex">
+              <Button size="sm">Get started</Button>
+            </Link>
             <ModeToggle />
           </div>
         </nav>

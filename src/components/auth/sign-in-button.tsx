@@ -33,13 +33,13 @@ export function SignInButton() {
       const result = await signIn.email({
         email,
         password,
-        callbackURL: "/overview",
+        callbackURL: "/lens",
       })
 
       if (result.error) {
         setError(result.error.message || "Failed to sign in")
       } else {
-        router.push("/overview")
+        router.push("/lens")
         router.refresh()
       }
     } catch {
@@ -88,7 +88,7 @@ export function SignInButton() {
       </div>
       <div className="text-center text-sm text-muted-foreground">
         Don&apos;t have an account?{" "}
-        <span className="text-muted-foreground/50 cursor-not-allowed">Sign up</span>
+        <Link href="/register" className="text-primary hover:underline">Sign up</Link>
       </div>
     </form>
   )

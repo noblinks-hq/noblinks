@@ -1,0 +1,3 @@
+  - Starter: http://localhost:3000/api/lens/dev-set-plan?plan=starter                                                                                
+  - Growth: http://localhost:3000/api/lens/dev-set-plan?plan=growth                                                                                  
+  - Reset to free: http://localhost:3000/api/lens/dev-set-plan?plan=none

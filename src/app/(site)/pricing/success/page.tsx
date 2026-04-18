@@ -10,15 +10,15 @@ export default function CheckoutSuccessPage() {
         <div className="space-y-2">
           <h1 className="text-3xl font-bold">You&apos;re all set!</h1>
           <p className="text-muted-foreground">
-            Your subscription is now active. Welcome to the next level of infrastructure monitoring.
+            Your subscription is now active. Start your first analysis to see your EU sovereignty score.
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Button asChild>
-            <Link href="/overview">Go to Dashboard</Link>
+            <Link href="/lens/analyze">Start Analysis</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/settings">Manage Billing</Link>
+            <Link href="/lens">Go to Lens</Link>
           </Button>
         </div>
       </div>

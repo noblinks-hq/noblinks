@@ -29,10 +29,15 @@ export function CheckoutButton({ slug, label, variant = "default", className }: 
     setLoading(true)
     try {
       const orgId = session.session?.activeOrganizationId
+      const isLens = slug.startsWith("lens-");
       const res = await fetch("/api/auth/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug, referenceId: orgId ?? undefined }),
+        body: JSON.stringify({
+          slug,
+          referenceId: orgId ?? undefined,
+          ...(isLens && { successUrl: "/lens/pricing/success?checkout_id={CHECKOUT_ID}" }),
+        }),
       })
 
       const data = await res.json() as { url?: string; message?: string; error?: string }

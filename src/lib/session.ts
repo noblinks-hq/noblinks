@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
  * Protected routes that require authentication.
  * These are also configured in src/proxy.ts for optimistic redirects.
  */
-export const protectedRoutes = ["/chat", "/dashboard", "/dashboards", "/profile", "/overview", "/machines", "/alerts", "/settings"];
+export const protectedRoutes = ["/lens", "/profile"];
 
 /**
  * Checks if the current request is authenticated.
@@ -56,7 +56,7 @@ export async function requireOrgAuth() {
     }
 
     // No organizations at all — first-time setup
-    redirect("/setup-organization");
+    redirect("/lens");
   }
 
   return session;

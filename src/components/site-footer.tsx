@@ -5,7 +5,7 @@ const footerLinks = [
   {
     heading: "Product",
     links: [
-      { label: "Overview", href: "/overview" },
+      { label: "Lens", href: "/lens" },
       { label: "Pricing", href: "/pricing" },
       { label: "Changelog", href: "/changelog" },
       { label: "Roadmap", href: "/roadmap" },
@@ -15,8 +15,6 @@ const footerLinks = [
     heading: "Resources",
     links: [
       { label: "Documentation", href: "https://docs.noblinks.com" },
-      { label: "Agent install", href: "/docs/agent" },
-      { label: "Integrations", href: "/integrations" },
       { label: "Status", href: "https://status.noblinks.com" },
     ],
   },
@@ -54,7 +52,7 @@ export function SiteFooter() {
               <span className="font-bold tracking-tight">Noblinks</span>
             </Link>
             <p className="text-xs text-muted-foreground leading-relaxed max-w-[180px]">
-              AI on-call engineer for your infrastructure. From alert to fix, no context switching.
+              Know your EU cloud sovereignty score. Detect compliance risks. Plan your migration.
             </p>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
@@ -85,7 +83,7 @@ export function SiteFooter() {
         {/* Bottom bar */}
         <div className="mt-12 pt-6 border-t flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
           <p>&copy; {new Date().getFullYear()} Noblinks, Inc. All rights reserved.</p>
-          <p>Made with care for engineers who hate waking up at 3am.</p>
+          <p>Built for EU cloud sovereignty.</p>
         </div>
       </div>
     </footer>
