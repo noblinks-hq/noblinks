@@ -33,8 +33,8 @@ export function SiteHeader() {
           {/* Right */}
           <div className="flex items-center gap-3">
             <UserProfile />
-            <Link href="/register" className="hidden sm:inline-flex">
-              <Button size="sm">Get started</Button>
+            <Link href="/register" className="hidden sm:inline-flex pointer-events-none opacity-40">
+              <Button size="sm" disabled>Get started</Button>
             </Link>
             <ModeToggle />
           </div>
