@@ -168,15 +168,13 @@ export default function Home() {
 
               <div className="flex flex-wrap gap-4">
                 <Button
-                  asChild
                   size="lg"
-                  className="rounded-lg px-6 h-12 text-base bg-violet-600 hover:bg-violet-500 text-white border-0"
+                  disabled
+                  className="rounded-lg px-6 h-12 text-base bg-violet-600 text-white border-0 opacity-40 cursor-not-allowed"
                 >
-                  <Link href="/register">
-                    <Search className="mr-2 h-4 w-4" />
-                    Check my stack
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
+                  <Search className="mr-2 h-4 w-4" />
+                  Check my stack
+                  <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
                 <Button
                   asChild

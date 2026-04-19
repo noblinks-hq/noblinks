@@ -1,6 +1,6 @@
 import { requireApiAuth } from "@/lib/session";
-import { lensDb } from "@/lib/lens/db";
-import { lensAnalysis } from "@/lib/lens/schema";
+import { db } from "@/lib/db";
+import { lensAnalysis } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 
 export async function GET(
@@ -12,7 +12,7 @@ export async function GET(
 
   const { id } = await params;
 
-  const [record] = await lensDb
+  const [record] = await db
     .select()
     .from(lensAnalysis)
     .where(and(eq(lensAnalysis.id, id), eq(lensAnalysis.userId, session.user.id)))
